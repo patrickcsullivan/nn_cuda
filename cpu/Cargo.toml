@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 cust = "0.3.2"
-nanorand = "0.6.1"
+itertools = "0.10.3"
 
 [build-dependencies]
 cuda_builder = "0.3.0"
