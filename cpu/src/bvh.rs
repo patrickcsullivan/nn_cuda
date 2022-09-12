@@ -4,6 +4,7 @@ use crate::morton::morton_code;
 use cuda_std::vek::Vec3;
 use cust::DeviceCopy;
 use gpu::aabb::DeviceCopyAabb;
+use itertools::Itertools;
 
 #[derive(Clone, Copy, Debug, DeviceCopy)]
 #[repr(C)]
@@ -12,9 +13,13 @@ pub enum NodeIndex {
     Leaf(usize),
 }
 
+#[derive(Clone, Copy, Debug, DeviceCopy)]
+#[repr(C)]
+pub struct ObjectIndex(usize);
+
 #[derive(Debug)]
 pub struct Bvh {
-    pub leaf_nodes: Vec<usize>,
+    pub leaf_nodes: Vec<ObjectIndex>,
     pub internal_nodes: Vec<(NodeIndex, NodeIndex, DeviceCopyAabb<f32>)>,
     pub root: NodeIndex,
 }
@@ -23,13 +28,13 @@ impl Bvh {
     pub fn new(objects: &[Vec3<f32>], aabb: DeviceCopyAabb<f32>) -> Self {
         let n = objects.len();
         let morton_codes = map_to_morton_codes(objects, &aabb);
-        let mut sorted_object_indices: Vec<usize> = (0..n).collect();
+        let mut sorted_object_indices = (0..n).map(ObjectIndex).collect_vec();
 
         // TODO: Radix sort on GPU.
-        sorted_object_indices.sort_by_key(|&i| morton_codes[i]);
+        sorted_object_indices.sort_by_key(|&ObjectIndex(i)| morton_codes[i]);
         let sorted_morton_codes = sorted_object_indices
             .iter()
-            .map(|&i| morton_codes[i])
+            .map(|&ObjectIndex(i)| morton_codes[i])
             .collect::<Vec<_>>();
 
         let root = top_down(
@@ -101,13 +106,13 @@ fn flatten(
 
 fn top_down(
     objects: &[Vec3<f32>],
-    sorted_object_indices: &[usize],
+    sorted_object_indices: &[ObjectIndex],
     sorted_morton_codes: &[u32],
     first: usize,
     last: usize,
 ) -> Node {
     if first == last {
-        let object_index = sorted_object_indices[first];
+        let ObjectIndex(object_index) = sorted_object_indices[first];
         Node::Leaf {
             sorted_object_indices_index: first,
             aabb: DeviceCopyAabb::new_empty(objects[object_index]),
