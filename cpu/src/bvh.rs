@@ -2,15 +2,62 @@ use std::fmt::Debug;
 
 use crate::morton::morton_code;
 use cuda_std::vek::Vec3;
+use cust::DeviceCopy;
 use gpu::aabb::DeviceCopyAabb;
 
+#[derive(Clone, Copy, Debug, DeviceCopy)]
+#[repr(C)]
+pub enum NodeIndex {
+    Internal(usize),
+    Leaf(usize),
+}
+
+pub struct Bvh {
+    pub leaf_nodes: Vec<usize>,
+    pub internal_nodes: Vec<(NodeIndex, NodeIndex, DeviceCopyAabb<f32>)>,
+    pub root: NodeIndex,
+}
+
+impl Bvh {
+    pub fn new(objects: &[Vec3<f32>], aabb: DeviceCopyAabb<f32>) -> Self {
+        let n = objects.len();
+        let morton_codes = map_to_morton_codes(objects, &aabb);
+        let mut sorted_object_indices: Vec<usize> = (0..n).collect();
+
+        // TODO: Radix sort on GPU.
+        sorted_object_indices.sort_by_key(|&i| morton_codes[i]);
+        let sorted_morton_codes = sorted_object_indices
+            .iter()
+            .map(|&i| morton_codes[i])
+            .collect::<Vec<_>>();
+
+        let root = top_down(
+            objects,
+            &sorted_object_indices,
+            &sorted_morton_codes,
+            0,
+            n - 1,
+        );
+
+        let mut internal_nodes: Vec<(NodeIndex, NodeIndex, DeviceCopyAabb<f32>)> = vec![];
+        let root = flatten(root, &mut internal_nodes);
+
+        Self {
+            leaf_nodes: sorted_object_indices,
+            internal_nodes,
+            root,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum Node {
-    InternalNode {
+    Internal {
         left: Box<Node>,
         right: Box<Node>,
         aabb: DeviceCopyAabb<f32>,
     },
-    LeafNode {
+    Leaf {
         object_index: usize,
         aabb: DeviceCopyAabb<f32>,
     },
@@ -19,12 +66,12 @@ pub enum Node {
 impl Node {
     fn aabb(&self) -> DeviceCopyAabb<f32> {
         match self {
-            Node::InternalNode {
+            Node::Internal {
                 left: _,
                 right: _,
                 aabb,
             } => *aabb,
-            Node::LeafNode {
+            Node::Leaf {
                 object_index: _,
                 aabb,
             } => *aabb,
@@ -32,45 +79,23 @@ impl Node {
     }
 }
 
-impl Debug for Node {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InternalNode { left, right, aabb } => f
-                .debug_struct("InternalNode")
-                .field("left", left)
-                .field("right", right)
-                .field("aabb", aabb)
-                .finish(),
-            Self::LeafNode { object_index, aabb } => f
-                .debug_struct("LeafNode")
-                .field("object_index", object_index)
-                .field("aabb", aabb)
-                .finish(),
+fn flatten(
+    node: Node,
+    internal_nodes: &mut Vec<(NodeIndex, NodeIndex, DeviceCopyAabb<f32>)>,
+) -> NodeIndex {
+    match node {
+        Node::Internal { left, right, aabb } => {
+            let left_index = flatten(*left, internal_nodes);
+            let right_index = flatten(*right, internal_nodes);
+            let index = internal_nodes.len();
+            internal_nodes.push((left_index, right_index, aabb));
+            NodeIndex::Internal(index)
         }
+        Node::Leaf {
+            object_index,
+            aabb: _,
+        } => NodeIndex::Leaf(object_index),
     }
-}
-
-pub fn build(objects: &[Vec3<f32>], aabb: DeviceCopyAabb<f32>) -> Node {
-    let n = objects.len();
-    let morton_codes = map_to_morton_codes(objects, &aabb);
-    let mut sorted_object_indices: Vec<usize> = (0..n).collect();
-
-    // TODO: Radix sort on GPU.
-    sorted_object_indices.sort_by_key(|&i| morton_codes[i]);
-    let sorted_morton_codes = sorted_object_indices
-        .iter()
-        .map(|&i| morton_codes[i])
-        .collect::<Vec<_>>();
-
-    let root = top_down(
-        objects,
-        &sorted_object_indices,
-        &sorted_morton_codes,
-        0,
-        n - 1,
-    );
-
-    root
 }
 
 fn top_down(
@@ -82,7 +107,7 @@ fn top_down(
 ) -> Node {
     if first == last {
         let object_index = sorted_object_indices[first];
-        Node::LeafNode {
+        Node::Leaf {
             object_index,
             aabb: DeviceCopyAabb::new_empty(objects[object_index]),
         }
@@ -103,7 +128,7 @@ fn top_down(
             last,
         );
         let aabb = left.aabb().union(right.aabb());
-        Node::InternalNode {
+        Node::Internal {
             left: Box::new(left),
             right: Box::new(right),
             aabb,
@@ -159,30 +184,30 @@ fn map_to_morton_codes(points: &[Vec3<f32>], aabb: &DeviceCopyAabb<f32>) -> Vec<
         .collect::<Vec<_>>()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::build;
-    use cuda_std::vek::Vec3;
-    use gpu::aabb::DeviceCopyAabb;
-    use itertools::Itertools;
+// #[cfg(test)]
+// mod tests {
+//     use super::build;
+//     use cuda_std::vek::Vec3;
+//     use gpu::aabb::DeviceCopyAabb;
+//     use itertools::Itertools;
 
-    #[test]
-    fn build_bvh() {
-        let upper = 2;
-        let mut points = (0..upper)
-            .into_iter()
-            .flat_map(|x| {
-                (0..upper).flat_map(move |y| {
-                    (0..upper).map(move |z| Vec3::new(x as f32, y as f32, z as f32))
-                })
-            })
-            .collect_vec();
-        points.reverse();
-        let aabb = DeviceCopyAabb::new_empty(points[0])
-            .union(DeviceCopyAabb::new_empty(points[points.len() - 1]));
-        let bvh = build(&points, aabb);
-        println!("POINTS: {:#?}", points);
-        println!("BVH: {:#?}", bvh);
-        assert!(true);
-    }
-}
+//     #[test]
+//     fn build_bvh() {
+//         let upper = 2;
+//         let mut points = (0..upper)
+//             .into_iter()
+//             .flat_map(|x| {
+//                 (0..upper).flat_map(move |y| {
+//                     (0..upper).map(move |z| Vec3::new(x as f32, y as f32, z
+// as f32))                 })
+//             })
+//             .collect_vec();
+//         points.reverse();
+//         let aabb = DeviceCopyAabb::new_empty(points[0])
+//             .union(DeviceCopyAabb::new_empty(points[points.len() - 1]));
+//         let bvh = build(&points, aabb);
+//         println!("POINTS: {:#?}", points);
+//         println!("BVH: {:#?}", bvh);
+//         assert!(true);
+//     }
+// }
