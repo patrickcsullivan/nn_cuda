@@ -1,4 +1,6 @@
-use cuda_std::vek::{approx::RelativeEq, num_traits::Float, Clamp, Vec3};
+use core::fmt::Debug;
+
+use cuda_std::vek::{approx::RelativeEq, num_traits::Float, Clamp, Extent3, Vec3};
 use cust_core::DeviceCopy;
 
 // use crate::f32::{partial_max, partial_min};
@@ -19,6 +21,12 @@ where
 {
     pub fn new_empty(p: Vec3<T>) -> Self {
         Self { min: p, max: p }
+    }
+
+    pub fn union(self, other: Self) -> Self {
+        let min = Vec3::<T>::partial_min(self.min, other.min);
+        let max = Vec3::<T>::partial_max(self.max, other.max);
+        Self { min, max }
     }
 }
 
@@ -41,5 +49,10 @@ where
         } else {
             T::zero()
         }
+    }
+
+    pub fn size(self) -> Extent3<T> {
+        let diff = self.max - self.min;
+        Extent3::new(diff.x, diff.y, diff.z)
     }
 }
