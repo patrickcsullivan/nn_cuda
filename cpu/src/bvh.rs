@@ -12,6 +12,7 @@ pub enum NodeIndex {
     Leaf(usize),
 }
 
+#[derive(Debug)]
 pub struct Bvh {
     pub leaf_nodes: Vec<usize>,
     pub internal_nodes: Vec<(NodeIndex, NodeIndex, DeviceCopyAabb<f32>)>,
@@ -58,7 +59,7 @@ pub enum Node {
         aabb: DeviceCopyAabb<f32>,
     },
     Leaf {
-        object_index: usize,
+        sorted_object_indices_index: usize,
         aabb: DeviceCopyAabb<f32>,
     },
 }
@@ -72,7 +73,7 @@ impl Node {
                 aabb,
             } => *aabb,
             Node::Leaf {
-                object_index: _,
+                sorted_object_indices_index: _,
                 aabb,
             } => *aabb,
         }
@@ -92,9 +93,9 @@ fn flatten(
             NodeIndex::Internal(index)
         }
         Node::Leaf {
-            object_index,
+            sorted_object_indices_index,
             aabb: _,
-        } => NodeIndex::Leaf(object_index),
+        } => NodeIndex::Leaf(sorted_object_indices_index),
     }
 }
 
@@ -108,7 +109,7 @@ fn top_down(
     if first == last {
         let object_index = sorted_object_indices[first];
         Node::Leaf {
-            object_index,
+            sorted_object_indices_index: first,
             aabb: DeviceCopyAabb::new_empty(objects[object_index]),
         }
     } else {
@@ -184,30 +185,30 @@ fn map_to_morton_codes(points: &[Vec3<f32>], aabb: &DeviceCopyAabb<f32>) -> Vec<
         .collect::<Vec<_>>()
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::build;
-//     use cuda_std::vek::Vec3;
-//     use gpu::aabb::DeviceCopyAabb;
-//     use itertools::Itertools;
+#[cfg(test)]
+mod tests {
+    use super::Bvh;
+    use cuda_std::vek::Vec3;
+    use gpu::aabb::DeviceCopyAabb;
+    use itertools::Itertools;
 
-//     #[test]
-//     fn build_bvh() {
-//         let upper = 2;
-//         let mut points = (0..upper)
-//             .into_iter()
-//             .flat_map(|x| {
-//                 (0..upper).flat_map(move |y| {
-//                     (0..upper).map(move |z| Vec3::new(x as f32, y as f32, z
-// as f32))                 })
-//             })
-//             .collect_vec();
-//         points.reverse();
-//         let aabb = DeviceCopyAabb::new_empty(points[0])
-//             .union(DeviceCopyAabb::new_empty(points[points.len() - 1]));
-//         let bvh = build(&points, aabb);
-//         println!("POINTS: {:#?}", points);
-//         println!("BVH: {:#?}", bvh);
-//         assert!(true);
-//     }
-// }
+    #[test]
+    fn build_bvh() {
+        let upper = 2;
+        let mut points = (0..upper)
+            .into_iter()
+            .flat_map(|x| {
+                (0..upper).flat_map(move |y| {
+                    (0..upper).map(move |z| Vec3::new(x as f32, y as f32, z as f32))
+                })
+            })
+            .collect_vec();
+        points.reverse();
+        let aabb = DeviceCopyAabb::new_empty(points[0])
+            .union(DeviceCopyAabb::new_empty(points[points.len() - 1]));
+        let bvh = Bvh::new(&points, aabb);
+        println!("POINTS: {:#?}", points);
+        println!("BVH: {:#?}", bvh);
+        assert!(true);
+    }
+}
