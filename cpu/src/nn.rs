@@ -4,22 +4,25 @@ use std::error::Error;
 
 static PTX: &str = include_str!("../../resources/gpu.ptx");
 
-pub fn add_vecs(a: Vec<i64>, b: Vec<i64>) -> Result<Vec<i64>, Box<dyn Error>> {
+pub fn find_nn(
+    leaf_node_object_indices: Vec<usize>,
+    queries: Vec<usize>,
+) -> Result<Vec<usize>, Box<dyn Error>> {
     // Allocate memory on the CPU.
-    let mut c = vec![0i64; a.len()];
+    let mut c: Vec<usize> = vec![0; leaf_node_object_indices.len()];
 
     let _ctx = cust::quick_init()?;
     let module = Module::from_ptx(PTX, &[])?;
-    let kernel = module.get_function("eg_01_add")?;
+    let kernel = module.get_function("find_nn")?;
     let stream = Stream::new(StreamFlags::NON_BLOCKING, None)?;
 
     // Allocate memory on the GPU.
-    let dev_a = a.as_slice().as_dbuf()?;
-    let dev_b = b.as_slice().as_dbuf()?;
+    let dev_a = leaf_node_object_indices.as_slice().as_dbuf()?;
+    let dev_b = queries.as_slice().as_dbuf()?;
     let dev_c = c.as_slice().as_dbuf()?;
 
     let (_, block_size) = kernel.suggested_launch_configuration(0, 0.into())?;
-    let grid_size = (a.len() as u32 + block_size - 1) / block_size;
+    let grid_size = (leaf_node_object_indices.len() as u32 + block_size - 1) / block_size;
 
     unsafe {
         launch!(
@@ -29,7 +32,7 @@ pub fn add_vecs(a: Vec<i64>, b: Vec<i64>) -> Result<Vec<i64>, Box<dyn Error>> {
                 dev_b.as_device_ptr(),
                 dev_b.len(),
                 dev_c.as_device_ptr(),
-                a.len()
+                leaf_node_object_indices.len()
             )
         )?;
     }
@@ -41,18 +44,18 @@ pub fn add_vecs(a: Vec<i64>, b: Vec<i64>) -> Result<Vec<i64>, Box<dyn Error>> {
     Ok(c)
 }
 
-pub fn find_nn(queries: Vec<f32>) -> Result<Vec<f32>, Box<dyn Error>> {
+pub fn find_nn_2(queries: Vec<f32>) -> Result<Vec<f32>, Box<dyn Error>> {
     // Allocate memory on the CPU.
-    let mut result_distances = vec![0.0f32; queries.len()];
+    let mut results_distances = vec![0.0f32; queries.len()];
 
     let _ctx = cust::quick_init()?;
     let module = Module::from_ptx(PTX, &[])?;
-    let kernel = module.get_function("find_nn")?;
+    let kernel = module.get_function("find_nn_2")?;
     let stream = Stream::new(StreamFlags::NON_BLOCKING, None)?;
 
     // Allocate memory on the GPU.
     let dev_queries = queries.as_slice().as_dbuf()?;
-    let dev_result_distances = result_distances.as_slice().as_dbuf()?;
+    let dev_results_distances = results_distances.as_slice().as_dbuf()?;
 
     let (_, block_size) = kernel.suggested_launch_configuration(0, 0.into())?;
     let grid_size = (queries.len() as u32 + block_size - 1) / block_size;
@@ -61,15 +64,16 @@ pub fn find_nn(queries: Vec<f32>) -> Result<Vec<f32>, Box<dyn Error>> {
         launch!(
             kernel<<<grid_size, block_size, 0, stream>>>(
                 dev_queries.as_device_ptr(),
-                queries.len(),
-                dev_result_distances.as_device_ptr(),
+                dev_queries.len(),
+                dev_results_distances.as_device_ptr(),
+                dev_results_distances.len(),
             )
         )?;
     }
     stream.synchronize()?;
 
     // Copy results from GPU back to CPU.
-    dev_result_distances.copy_to(&mut result_distances)?;
+    dev_results_distances.copy_to(&mut results_distances)?;
 
-    Ok(result_distances)
+    Ok(results_distances)
 }

@@ -9,7 +9,7 @@ use cuda_std::prelude::*;
 
 #[kernel]
 #[allow(improper_ctypes_definitions, clippy::missing_safety_doc)]
-pub unsafe fn eg_01_add(a: &[i64], b: &[i64], c: *mut i64, n: usize) {
+pub unsafe fn find_nn(a: &[usize], b: &[usize], c: *mut usize, n: usize) {
     let mut tid = (thread::thread_idx_x() + thread::block_idx_x() * thread::block_dim_x()) as usize;
     while tid < n {
         let elem = &mut *c.add(tid);
@@ -20,10 +20,10 @@ pub unsafe fn eg_01_add(a: &[i64], b: &[i64], c: *mut i64, n: usize) {
 
 #[kernel]
 #[allow(improper_ctypes_definitions, clippy::missing_safety_doc)]
-pub unsafe fn find_nn(queries: &[f32], queries_count: usize, result_distances: *mut f32) {
+pub unsafe fn find_nn_2(queries: &[f32], results_distances: *mut f32, results_count: usize) {
     let mut tid = (thread::thread_idx_x() + thread::block_idx_x() * thread::block_dim_x()) as usize;
-    while tid < queries_count {
-        let elem = &mut *result_distances.add(tid);
+    while tid < results_count {
+        let elem = &mut *results_distances.add(tid);
         *elem = queries[tid] * 10.0;
         tid += (thread::block_dim_x() * thread::grid_dim_x()) as usize;
     }
