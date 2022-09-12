@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+cuda_std = "0.2.2"
 cust = "0.3.2"
 itertools = "0.10.3"
 
