@@ -1,3 +1,3 @@
 pub mod bvh;
-mod morton;
+pub mod morton;
 pub mod nn;

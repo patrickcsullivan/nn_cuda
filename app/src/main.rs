@@ -1,6 +1,6 @@
 mod dragon;
 
-use cpu::bvh::Bvh;
+use cpu::{bvh::Bvh, morton::map_to_morton_codes_tmp};
 use cuda_std::vek::{Aabb, Vec3};
 use itertools::Itertools;
 use rayon::prelude::*;
@@ -28,7 +28,7 @@ fn dragon_test() -> Result<(), Box<dyn Error>> {
     let mut objects = dragon::ply_vertices("./app/data/dragon_vrip.ply");
 
     // Shift the objects so that the bounding box is centered on the origin.
-    let mut aabb = dragon::get_aabb(&objects);
+    let mut aabb = get_aabb(&objects);
     let center = aabb.center();
     objects.iter_mut().for_each(|o| {
         *o = *o - center;
@@ -62,12 +62,20 @@ fn benchmarks(
     println!("{} queries", queries.len());
 
     // Radix sort queries.
+    let queries_aabb = get_aabb(queries);
+    let morton_codes = map_to_morton_codes_tmp(queries, &queries_aabb);
+    let mut sorted_query_indices = (0..queries.len()).collect_vec();
+    sorted_query_indices.sort_by_key(|&i| morton_codes[i]);
+    let sorted_queries = sorted_query_indices
+        .into_iter()
+        .map(|i| queries[i])
+        .collect_vec();
 
     // Test brute force CUDA.
     let now = Instant::now();
     let bf_results = cpu::nn::brute_force(&objects, &queries)?;
     let elapsed = now.elapsed();
-    println!("Brute Force CUDA:\t{:.2?}", elapsed);
+    println!("Brute Force CUDA:\t\t{:.2?}", elapsed);
 
     // Build BVH.
     let bvh = Bvh::new_with_aabb(&objects, &aabb);
@@ -76,7 +84,13 @@ fn benchmarks(
     let now = Instant::now();
     let bvh_results = cpu::nn::find_nn(&bvh, &queries)?;
     let elapsed = now.elapsed();
-    println!("BVH CUDA:\t\t{:.2?}", elapsed);
+    println!("BVH CUDA:\t\t\t{:.2?}", elapsed);
+
+    // Test BVH CUDA with sorted queries.
+    let now = Instant::now();
+    let _bvh_sorted_results = cpu::nn::find_nn(&bvh, &sorted_queries)?;
+    let elapsed = now.elapsed();
+    println!("BVH CUDA (sorted queries):\t{:.2?}", elapsed);
 
     // Build RTree and RTree queries.
     let rtree_objects = objects
@@ -97,7 +111,7 @@ fn benchmarks(
         .map(|q| rtree.nearest_neighbor(q))
         .collect_vec();
     let elapsed = now.elapsed();
-    println!("RTree (1-core):\t\t{:.2?}", elapsed);
+    println!("RTree (1-core):\t\t\t{:.2?}", elapsed);
 
     // Test with R* multi-threaded.
     let now = Instant::now();
@@ -106,7 +120,7 @@ fn benchmarks(
         .map(|q| rtree.nearest_neighbor(q))
         .collect();
     let elapsed = now.elapsed();
-    println!("RTree (8-core):\t\t{:.2?}", elapsed);
+    println!("RTree (8-core):\t\t\t{:.2?}", elapsed);
 
     let fails = (0..queries.len())
         .filter(|&i| bvh_results[i].unwrap().0 != bf_results[i].unwrap().0)
@@ -175,4 +189,12 @@ impl rstar::PointDistance for IndexedPoint {
     ) -> <<Self::Envelope as rstar::Envelope>::Point as rstar::Point>::Scalar {
         self.point.distance_2(point)
     }
+}
+
+fn get_aabb(vs: &[Vec3<f32>]) -> Aabb<f32> {
+    let mut aabb = Aabb::new_empty(vs[0]);
+    for v in vs {
+        aabb.expand_to_contain_point(*v);
+    }
+    aabb
 }

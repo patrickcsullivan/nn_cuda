@@ -50,11 +50,3 @@ pub fn ply_vertices(ply_path: &str) -> Vec<Vec3<f32>> {
 
     vertices.iter().map(|v| v.v).collect_vec()
 }
-
-pub fn get_aabb(vs: &[Vec3<f32>]) -> Aabb<f32> {
-    let mut aabb = Aabb::new_empty(vs[0]);
-    for v in vs {
-        aabb.expand_to_contain_point(*v);
-    }
-    aabb
-}
