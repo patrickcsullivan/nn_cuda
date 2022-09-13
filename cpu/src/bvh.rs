@@ -2,20 +2,11 @@ use std::fmt::Debug;
 
 use crate::morton::morton_code;
 use cuda_std::vek::Vec3;
-use cust::DeviceCopy;
-use gpu::aabb::DeviceCopyAabb;
+use gpu::{
+    aabb::DeviceCopyAabb,
+    bvh::{NodeIndex, ObjectIndex},
+};
 use itertools::Itertools;
-
-#[derive(Clone, Copy, Debug, DeviceCopy)]
-#[repr(C)]
-pub enum NodeIndex {
-    Internal(usize),
-    Leaf(usize),
-}
-
-#[derive(Clone, Copy, Debug, DeviceCopy)]
-#[repr(C)]
-pub struct ObjectIndex(usize);
 
 #[derive(Debug)]
 pub struct Bvh {
