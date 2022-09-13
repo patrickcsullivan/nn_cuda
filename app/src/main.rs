@@ -45,7 +45,7 @@ fn dragon_test() -> Result<(), Box<dyn Error>> {
 
     // Test BVH CUDA.
     let now = Instant::now();
-    let _bvh_results = cpu::nn::find_nn(&bvh, &queries)?;
+    let bvh_results = cpu::nn::find_nn(&bvh, &queries)?;
     let elapsed = now.elapsed();
     println!("BVH CUDA:\t{:.2?}", elapsed);
 
@@ -72,12 +72,20 @@ fn dragon_test() -> Result<(), Box<dyn Error>> {
 
     // Test with R* multi-threaded.
     let now = Instant::now();
-    let _rtree_results_mt: Vec<_> = rtree_queries
+    let rtree_results_mt: Vec<_> = rtree_queries
         .par_iter()
         .map(|q| rtree.nearest_neighbor(q))
         .collect();
     let elapsed = now.elapsed();
     println!("RTree (8-core):\t{:.2?}", elapsed);
+
+    let fails = (0..queries.len())
+        .filter(|&i| bvh_results[i].unwrap().0 == rtree_results_mt[i].unwrap().index)
+        .collect_vec();
+    println!(
+        "BVH CUDA and RTree (8-core) mismatch on {} queries",
+        fails.len()
+    );
 
     Ok(())
 }
