@@ -1,12 +1,19 @@
 use cuda_std::{prelude::*, vek::Vec3};
 
-use crate::{aabb::DeviceCopyAabb, bvh::ObjectIndex};
+use crate::{
+    aabb::DeviceCopyAabb,
+    bvh::{NodeIndex, ObjectIndex},
+};
 
 #[kernel]
 #[allow(improper_ctypes_definitions, clippy::missing_safety_doc)]
 pub unsafe fn brute_force(
     leaf_object_indices: &[ObjectIndex],
     leaf_aabbs: &[DeviceCopyAabb<f32>],
+    //------
+    internal_left_child_indicies: &[NodeIndex],
+    internal_right_child_indicies: &[NodeIndex],
+    internal_aabbs: &[DeviceCopyAabb<f32>],
     //------
     queries: &[Vec3<f32>],
     //------

@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use crate::morton::morton_code;
-use cuda_std::vek::Vec3;
+use cuda_std::vek::{Aabb, Vec3};
 use gpu::{
     aabb::DeviceCopyAabb,
     bvh::{NodeIndex, ObjectIndex},
@@ -10,12 +10,20 @@ use itertools::Itertools;
 
 #[derive(Debug)]
 pub struct Bvh {
-    pub leaf_nodes: Vec<ObjectIndex>,
+    pub leaf_nodes: Vec<(ObjectIndex, DeviceCopyAabb<f32>)>,
     pub internal_nodes: Vec<(NodeIndex, NodeIndex, DeviceCopyAabb<f32>)>,
     pub root: NodeIndex,
 }
 
 impl Bvh {
+    pub fn new_with_aabb(objects: &[Vec3<f32>], aabb: Aabb<f32>) -> Self {
+        let aabb = DeviceCopyAabb {
+            min: aabb.min,
+            max: aabb.max,
+        };
+        Self::new(objects, aabb)
+    }
+
     pub fn new(objects: &[Vec3<f32>], aabb: DeviceCopyAabb<f32>) -> Self {
         let n = objects.len();
         let morton_codes = map_to_morton_codes(objects, &aabb);
@@ -28,7 +36,7 @@ impl Bvh {
             .map(|&ObjectIndex(i)| morton_codes[i])
             .collect::<Vec<_>>();
 
-        let root = top_down(
+        let root_node = top_down(
             objects,
             &sorted_object_indices,
             &sorted_morton_codes,
@@ -37,12 +45,16 @@ impl Bvh {
         );
 
         let mut internal_nodes: Vec<(NodeIndex, NodeIndex, DeviceCopyAabb<f32>)> = vec![];
-        let root = flatten(root, &mut internal_nodes);
+        let root_node_index = flatten(root_node, &mut internal_nodes);
+        let leaf_nodes = sorted_object_indices
+            .into_iter()
+            .map(|oi| (oi, DeviceCopyAabb::new_empty(objects[oi.0])))
+            .collect_vec();
 
         Self {
-            leaf_nodes: sorted_object_indices,
+            leaf_nodes,
             internal_nodes,
-            root,
+            root: root_node_index,
         }
     }
 }
