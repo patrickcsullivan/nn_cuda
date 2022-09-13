@@ -7,7 +7,7 @@ use std::error::Error;
 
 static PTX: &str = include_str!("../../resources/gpu.ptx");
 
-pub fn brute_force(
+pub fn find_nn(
     bvh: &Bvh,
     queries: Vec<Vec3<f32>>,
 ) -> Result<Vec<(ObjectIndex, f32)>, Box<dyn Error>> {
@@ -22,7 +22,7 @@ pub fn brute_force(
 
     let _ctx = cust::quick_init()?;
     let module = Module::from_ptx(PTX, &[])?;
-    let kernel = module.get_function("brute_force")?;
+    let kernel = module.get_function("find_nn")?;
     let stream = Stream::new(StreamFlags::NON_BLOCKING, None)?;
 
     // Allocate memory on the GPU.

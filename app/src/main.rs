@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let queries = (0..(3 * 1024))
         .map(|i| Vec3::new(i as f32, i as f32, i as f32))
         .collect_vec();
-    let results = cpu::nn::brute_force(&bvh, queries)?;
+    let results = cpu::nn::find_nn(&bvh, queries)?;
     println!("results: {:#?}", results.iter().take(15).collect_vec());
 
     Ok(())

@@ -10,7 +10,7 @@ const TRAVERSAL_STACK_MAX_SIZE: usize = 64;
 
 #[kernel]
 #[allow(improper_ctypes_definitions, clippy::missing_safety_doc)]
-pub unsafe fn brute_force(
+pub unsafe fn find_nn(
     leaf_object_indices: &[ObjectIndex],
     leaf_aabbs: &[DeviceCopyAabb<f32>],
     //------
@@ -27,7 +27,7 @@ pub unsafe fn brute_force(
     let mut tid = (thread::thread_idx_x() + thread::block_idx_x() * thread::block_dim_x()) as usize;
     while tid < queries.len() {
         let query = queries[tid];
-        let (nn_object_index, nn_dist_squared) = brute_force_for_query(
+        let (nn_object_index, nn_dist_squared) = find_nn_for_query(
             leaf_object_indices,
             leaf_aabbs,
             internal_left_child_indicies,
@@ -46,7 +46,7 @@ pub unsafe fn brute_force(
     }
 }
 
-pub fn brute_force_for_query(
+pub fn find_nn_for_query(
     leaf_object_indices: &[ObjectIndex],
     leaf_aabbs: &[DeviceCopyAabb<f32>],
     //------
