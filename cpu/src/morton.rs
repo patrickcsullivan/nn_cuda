@@ -1,4 +1,17 @@
 use cuda_std::vek::Vec3;
+use gpu::aabb::DeviceCopyAabb;
+
+/// Maps each 3-dimensional point to a Morton code.
+pub fn map_to_morton_codes(points: &[Vec3<f32>], aabb: &DeviceCopyAabb<f32>) -> Vec<u32> {
+    let scale = aabb.size().recip();
+    points
+        .iter()
+        .map(|p| {
+            let p = (p - aabb.min) * scale;
+            morton_code(p)
+        })
+        .collect::<Vec<_>>()
+}
 
 /// Returns the 3-dimensional 30-bit Morton code for the given 3D point
 /// inside the unit cube [(0, 0, 0), (1, 1, 1)].

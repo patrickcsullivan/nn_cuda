@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::morton::morton_code;
+use crate::morton::map_to_morton_codes;
 use cuda_std::vek::{Aabb, Vec3};
 use gpu::{
     aabb::DeviceCopyAabb,
@@ -179,18 +179,6 @@ fn find_split(sorted_morton_codes: &[u32], first: usize, last: usize) -> usize {
     }
 
     split
-}
-
-/// Maps each 3-dimensional point to a Morton code.
-fn map_to_morton_codes(points: &[Vec3<f32>], aabb: &DeviceCopyAabb<f32>) -> Vec<u32> {
-    let scale = aabb.size().recip();
-    points
-        .iter()
-        .map(|p| {
-            let p = (p - aabb.min) * scale;
-            morton_code(p)
-        })
-        .collect::<Vec<_>>()
 }
 
 #[cfg(test)]

@@ -38,7 +38,7 @@ where
         let x = Self::distance_to_range(p.x, self.min.x, self.max.x);
         let y = Self::distance_to_range(p.y, self.min.y, self.max.y);
         let z = Self::distance_to_range(p.z, self.min.z, self.max.z);
-        x + y + z
+        x * x + y * y + z * z
     }
 
     fn distance_to_range(val: T, min: T, max: T) -> T {

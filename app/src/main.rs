@@ -8,13 +8,24 @@ use rstar::{PointDistance, RTree, RTreeObject};
 use std::{error::Error, time::Instant};
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // simple_test()?;
     dragon_test()?;
     Ok(())
 }
 
+fn simple_test() -> Result<(), Box<dyn Error>> {
+    let objects = vec![Vec3::new(-1.0, -1.0, -1.0), Vec3::new(10.0, 10.0, 10.0)];
+    let aabb = Aabb::new_empty(objects[0]).union(Aabb::new_empty(objects[objects.len() - 1]));
+
+    let queries = (0..(3 * 1024))
+        .map(|i| Vec3::new(i as f32, i as f32, i as f32))
+        .collect_vec();
+
+    benchmarks(&objects, &aabb, &queries)
+}
+
 fn dragon_test() -> Result<(), Box<dyn Error>> {
     let mut objects = dragon::ply_vertices("./app/data/dragon_vrip.ply");
-    println!("{} objects", objects.len());
 
     // Shift the objects so that the bounding box is centered on the origin.
     let mut aabb = dragon::get_aabb(&objects);
@@ -38,7 +49,25 @@ fn dragon_test() -> Result<(), Box<dyn Error>> {
         .collect_vec();
     queries.append(&mut expanded_queries);
     queries.append(&mut shifted_queries);
+
+    benchmarks(&objects, &aabb, &queries)
+}
+
+fn benchmarks(
+    objects: &[Vec3<f32>],
+    aabb: &Aabb<f32>,
+    queries: &[Vec3<f32>],
+) -> Result<(), Box<dyn Error>> {
+    println!("{} objects", objects.len());
     println!("{} queries", queries.len());
+
+    // Radix sort queries.
+
+    // Test brute force CUDA.
+    let now = Instant::now();
+    let bf_results = cpu::nn::brute_force(&objects, &queries)?;
+    let elapsed = now.elapsed();
+    println!("Brute Force CUDA:\t{:.2?}", elapsed);
 
     // Build BVH.
     let bvh = Bvh::new_with_aabb(&objects, &aabb);
@@ -47,11 +76,11 @@ fn dragon_test() -> Result<(), Box<dyn Error>> {
     let now = Instant::now();
     let bvh_results = cpu::nn::find_nn(&bvh, &queries)?;
     let elapsed = now.elapsed();
-    println!("BVH CUDA:\t{:.2?}", elapsed);
+    println!("BVH CUDA:\t\t{:.2?}", elapsed);
 
     // Build RTree and RTree queries.
     let rtree_objects = objects
-        .into_iter()
+        .iter()
         .enumerate()
         .map(|(i, o)| IndexedPoint {
             index: i,
@@ -68,7 +97,7 @@ fn dragon_test() -> Result<(), Box<dyn Error>> {
         .map(|q| rtree.nearest_neighbor(q))
         .collect_vec();
     let elapsed = now.elapsed();
-    println!("RTree (1-core):\t{:.2?}", elapsed);
+    println!("RTree (1-core):\t\t{:.2?}", elapsed);
 
     // Test with R* multi-threaded.
     let now = Instant::now();
@@ -77,13 +106,49 @@ fn dragon_test() -> Result<(), Box<dyn Error>> {
         .map(|q| rtree.nearest_neighbor(q))
         .collect();
     let elapsed = now.elapsed();
-    println!("RTree (8-core):\t{:.2?}", elapsed);
+    println!("RTree (8-core):\t\t{:.2?}", elapsed);
 
     let fails = (0..queries.len())
-        .filter(|&i| bvh_results[i].unwrap().0 == rtree_results_mt[i].unwrap().index)
+        .filter(|&i| bvh_results[i].unwrap().0 != bf_results[i].unwrap().0)
         .collect_vec();
     println!(
-        "BVH CUDA and RTree (8-core) mismatch on {} queries",
+        "BVH CUDA and Brute Force CUDA find different NNs on {} queries",
+        fails.len()
+    );
+
+    let fails = (0..queries.len())
+        .filter(|&i| {
+            (bvh_results[i].unwrap().1.sqrt() - bf_results[i].unwrap().1.sqrt()).abs()
+                > f32::EPSILON
+        })
+        .collect_vec();
+    println!(
+        "BVH CUDA and Brute Force CUDA find different NN dists on {} queries",
+        fails.len()
+    );
+
+    let fails = (0..queries.len())
+        .filter(|&i| bvh_results[i].unwrap().0 != rtree_results_mt[i].unwrap().index)
+        .collect_vec();
+    println!(
+        "BVH CUDA and RTree (8-core) find different NNs on {} queries",
+        fails.len()
+    );
+
+    let fails = (0..queries.len())
+        .filter(|&i| {
+            let query = queries[i];
+            let rtree_nn_idx = rtree_results_mt[i].unwrap().index;
+            let rtree_nn = objects[rtree_nn_idx];
+            let rtree_dist = query.distance(rtree_nn);
+
+            let bvh_dist = bvh_results[i].unwrap().1.sqrt();
+
+            (bvh_dist - rtree_dist).abs() > f32::EPSILON
+        })
+        .collect_vec();
+    println!(
+        "BVH CUDA and RTree (8-core) find different NN dists on {} queries",
         fails.len()
     );
 
@@ -110,20 +175,4 @@ impl rstar::PointDistance for IndexedPoint {
     ) -> <<Self::Envelope as rstar::Envelope>::Point as rstar::Point>::Scalar {
         self.point.distance_2(point)
     }
-}
-
-fn simple_test() -> Result<(), Box<dyn Error>> {
-    // let leaf_node_object_indices = (0..(3 * 1024)).collect_vec();
-    // let queries = leaf_node_object_indices.iter().map(|n| n * n).collect_vec();
-    let objects = vec![Vec3::new(-1.0, -1.0, -1.0), Vec3::new(10.0, 10.0, 10.0)];
-    let aabb = Aabb::new_empty(objects[0]).union(Aabb::new_empty(objects[objects.len() - 1]));
-    let bvh = Bvh::new_with_aabb(&objects, &aabb);
-
-    let queries = (0..(3 * 1024))
-        .map(|i| Vec3::new(i as f32, i as f32, i as f32))
-        .collect_vec();
-    let results = cpu::nn::find_nn(&bvh, &queries)?;
-    println!("results: {:#?}", results.iter().take(15).collect_vec());
-
-    Ok(())
 }
