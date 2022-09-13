@@ -9,3 +9,4 @@ edition = "2021"
 cpu =  { path = "../cpu" }
 cuda_std = "0.2.2"
 itertools = "0.10.3"
+ply-rs = "0.1.3"

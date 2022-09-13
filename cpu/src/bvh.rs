@@ -16,7 +16,7 @@ pub struct Bvh {
 }
 
 impl Bvh {
-    pub fn new_with_aabb(objects: &[Vec3<f32>], aabb: Aabb<f32>) -> Self {
+    pub fn new_with_aabb(objects: &[Vec3<f32>], aabb: &Aabb<f32>) -> Self {
         let aabb = DeviceCopyAabb {
             min: aabb.min,
             max: aabb.max,
@@ -214,9 +214,7 @@ mod tests {
         points.reverse();
         let aabb = DeviceCopyAabb::new_empty(points[0])
             .union(DeviceCopyAabb::new_empty(points[points.len() - 1]));
-        let bvh = Bvh::new(&points, aabb);
-        println!("POINTS: {:#?}", points);
-        println!("BVH: {:#?}", bvh);
+        let _bvh = Bvh::new(&points, aabb);
         assert!(true);
     }
 }
