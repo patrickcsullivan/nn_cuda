@@ -52,6 +52,7 @@ pub fn brute_force(
                 dev_internal_right_child_indices.len(),
                 dev_internal_aabbs.as_device_ptr(),
                 dev_internal_aabbs.len(),
+                bvh.root,
                 //-----
                 dev_queries.as_device_ptr(),
                 dev_queries.len(),
