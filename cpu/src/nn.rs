@@ -9,8 +9,8 @@ static PTX: &str = include_str!("../../resources/gpu.ptx");
 
 pub fn find_nn(
     bvh: &Bvh,
-    queries: Vec<Vec3<f32>>,
-) -> Result<Vec<(ObjectIndex, f32)>, Box<dyn Error>> {
+    queries: &[Vec3<f32>],
+) -> Result<Vec<Option<(usize, f32)>>, Box<dyn Error>> {
     // Allocate memory on the CPU.
     let leaf_object_indices = bvh.leaf_nodes.iter().map(|n| n.0).collect_vec();
     let leaf_aabbs = bvh.leaf_nodes.iter().map(|n| n.1).collect_vec();
@@ -31,7 +31,7 @@ pub fn find_nn(
     let dev_internal_left_child_indices = internal_left_child_indicies.as_slice().as_dbuf()?;
     let dev_internal_right_child_indices = internal_right_child_indicies.as_slice().as_dbuf()?;
     let dev_internal_aabbs = internal_aabbs.as_slice().as_dbuf()?;
-    let dev_queries = queries.as_slice().as_dbuf()?;
+    let dev_queries = queries.as_dbuf()?;
     let dev_results_leaf_object_indices = results_leaf_object_indices.as_slice().as_dbuf()?;
     let dev_results_distances = results_distances.as_slice().as_dbuf()?;
 
@@ -69,7 +69,9 @@ pub fn find_nn(
 
     let results = results_leaf_object_indices
         .into_iter()
+        .map(|ObjectIndex(i)| i)
         .zip(results_distances)
+        .map(|(i, d)| if d.is_finite() { Some((i, d)) } else { None })
         .collect_vec();
     Ok(results)
 }
