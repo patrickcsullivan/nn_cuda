@@ -86,8 +86,12 @@ pub fn find_nn_for_query(
 
                 // Push children that need to be traversed onto the traversal stack. When both
                 // children need to be traversed, traverse the left child first.
-                traversal_stack.push((right_child_index, right_dist_squared));
-                traversal_stack.push((left_child_index, left_dist_squared));
+                if right_dist_squared < nn_dist_squared {
+                    traversal_stack.push((right_child_index, right_dist_squared));
+                }
+                if left_dist_squared < nn_dist_squared {
+                    traversal_stack.push((left_child_index, left_dist_squared));
+                }
             }
         }
     }
