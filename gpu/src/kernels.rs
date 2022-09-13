@@ -62,15 +62,13 @@ pub fn brute_force_for_query(
 
     // Each thread will maintain a stack of nodes to visit for a depth-first
     // traversal.
-    let mut traversal_stack = Stack::<NodeIndex, TRAVERSAL_STACK_MAX_SIZE>::empty();
-    traversal_stack.push(root_index);
+    let mut traversal_stack = Stack::<(NodeIndex, f32), TRAVERSAL_STACK_MAX_SIZE>::empty();
+    let root_dist_squared = point_to_node(leaf_aabbs, internal_aabbs, root_index, query);
+    traversal_stack.push((root_index, root_dist_squared));
 
-    while let Some(node_index) = traversal_stack.pop() {
+    while let Some((node_index, dist_squared)) = traversal_stack.pop() {
         match node_index {
             NodeIndex::Leaf(leaf_index) => {
-                let aabb = leaf_aabbs[leaf_index];
-                let dist_squared = aabb.distance_squared_to_point(query);
-
                 if dist_squared < nn_dist_squared {
                     nn_object_index = leaf_object_indices[leaf_index];
                     nn_dist_squared = dist_squared;
@@ -79,11 +77,43 @@ pub fn brute_force_for_query(
             NodeIndex::Internal(internal_index) => {
                 let left_child_index = internal_left_child_indicies[internal_index];
                 let right_child_index = internal_right_child_indicies[internal_index];
-                traversal_stack.push(right_child_index);
-                traversal_stack.push(left_child_index);
+
+                // Check the minimum possible distance to each child node.
+                let left_dist_squared =
+                    point_to_node(leaf_aabbs, internal_aabbs, left_child_index, query);
+                let right_dist_squared =
+                    point_to_node(leaf_aabbs, internal_aabbs, right_child_index, query);
+
+                // Push children that need to be traversed onto the traversal stack. When both
+                // children need to be traversed, traverse the left child first.
+                traversal_stack.push((right_child_index, right_dist_squared));
+                traversal_stack.push((left_child_index, left_dist_squared));
             }
         }
     }
 
     (nn_object_index, nn_dist_squared)
+}
+
+/// Returns the squared distance between the point and the bounding box of the
+/// specified node.
+fn point_to_node(
+    leaf_aabbs: &[DeviceCopyAabb<f32>],
+    internal_aabbs: &[DeviceCopyAabb<f32>],
+    node_index: NodeIndex,
+    point: Vec3<f32>,
+) -> f32 {
+    get_aabb(leaf_aabbs, internal_aabbs, node_index).distance_squared_to_point(point)
+}
+
+/// Returns the bounding box of the specified node.
+fn get_aabb(
+    leaf_aabbs: &[DeviceCopyAabb<f32>],
+    internal_aabbs: &[DeviceCopyAabb<f32>],
+    node_index: NodeIndex,
+) -> DeviceCopyAabb<f32> {
+    match node_index {
+        NodeIndex::Leaf(leaf_index) => leaf_aabbs[leaf_index],
+        NodeIndex::Internal(internal_index) => internal_aabbs[internal_index],
+    }
 }
