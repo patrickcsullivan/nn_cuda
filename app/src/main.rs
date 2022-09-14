@@ -3,6 +3,7 @@ mod dragon;
 use cpu::{bvh::Bvh, morton::map_to_morton_codes_tmp};
 use cuda_std::vek::{Aabb, Vec3};
 use itertools::Itertools;
+use kiddo::KdTree;
 use rayon::prelude::*;
 use rstar::{PointDistance, RTree, RTreeObject};
 use std::{error::Error, time::Instant};
@@ -104,23 +105,48 @@ fn benchmarks(
     let rtree_queries = queries.iter().map(|q| [q.x, q.y, q.z]).collect_vec();
     let rtree = RTree::bulk_load(rtree_objects);
 
-    // Test with R* single-threaded.
+    // Test with RTree single-threaded.
     let now = Instant::now();
     let _rtree_results_st = rtree_queries
         .iter()
         .map(|q| rtree.nearest_neighbor(q))
         .collect_vec();
     let elapsed = now.elapsed();
-    println!("RTree (1-core):\t\t\t{:.2?}", elapsed);
+    println!("rstar (1-core):\t\t\t{:.2?}", elapsed);
 
-    // Test with R* multi-threaded.
+    // Test with RTree multi-threaded.
     let now = Instant::now();
     let rtree_results_mt: Vec<_> = rtree_queries
         .par_iter()
         .map(|q| rtree.nearest_neighbor(q))
         .collect();
     let elapsed = now.elapsed();
-    println!("RTree (8-core):\t\t\t{:.2?}", elapsed);
+    println!("rstar (8-core):\t\t\t{:.2?}", elapsed);
+
+    // Build KDTree and KDTree queries.
+    let kdtree_queries = queries.iter().map(|q| [q.x, q.y, q.z]).collect_vec();
+    let mut kdtree = KdTree::new();
+    for (i, o) in objects.iter().enumerate() {
+        kdtree.add(&[o.x, o.y, o.z], i)?;
+    }
+
+    // Test with KDTree single-threaded.
+    let now = Instant::now();
+    let _kdtree_results_st = kdtree_queries
+        .iter()
+        .map(|q| kdtree.nearest_one(q, &kiddo::distance::squared_euclidean))
+        .collect_vec();
+    let elapsed = now.elapsed();
+    println!("kiddo (1-core):\t\t\t{:.2?}", elapsed);
+
+    // Test with KDTree multi-threaded.
+    let now = Instant::now();
+    let _kdtree_results_mt: Vec<_> = kdtree_queries
+        .par_iter()
+        .map(|q| kdtree.nearest_one(q, &kiddo::distance::squared_euclidean))
+        .collect();
+    let elapsed = now.elapsed();
+    println!("kiddo (8-core):\t\t\t{:.2?}", elapsed);
 
     let fails = (0..queries.len())
         .filter(|&i| bvh_results[i].unwrap().0 != bf_results[i].unwrap().0)
@@ -145,7 +171,7 @@ fn benchmarks(
         .filter(|&i| bvh_results[i].unwrap().0 != rtree_results_mt[i].unwrap().index)
         .collect_vec();
     println!(
-        "BVH CUDA and RTree (8-core) find different NNs on {} queries",
+        "BVH CUDA and rstar (8-core) find different NNs on {} queries",
         fails.len()
     );
 
@@ -162,7 +188,7 @@ fn benchmarks(
         })
         .collect_vec();
     println!(
-        "BVH CUDA and RTree (8-core) find different NN dists on {} queries",
+        "BVH CUDA and rstar (8-core) find different NN dists on {} queries",
         fails.len()
     );
 
