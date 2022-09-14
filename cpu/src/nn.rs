@@ -38,6 +38,11 @@ pub fn find_nn(
     let (_, block_size) = kernel.suggested_launch_configuration(0, 0.into())?;
     let grid_size = (queries.len() as u32 + block_size - 1) / block_size;
 
+    // println!(
+    //     "(Launching kernel with {} blocks and {} threads per block",
+    //     grid_size, block_size
+    // );
+
     unsafe {
         launch!(
             kernel<<<grid_size, block_size, 0, stream>>>(
@@ -103,6 +108,11 @@ pub fn brute_force(
 
     let (_, block_size) = kernel.suggested_launch_configuration(0, 0.into())?;
     let grid_size = (queries.len() as u32 + block_size - 1) / block_size;
+
+    // println!(
+    //     "(Launching kernel with {} blocks and {} threads per block",
+    //     grid_size, block_size
+    // );
 
     unsafe {
         launch!(
