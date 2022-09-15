@@ -157,24 +157,24 @@ fn benchmarks(
     // let elapsed = now.elapsed();
     // println!("kiddo (8-core):\t\t\t{:.2?}", elapsed);
 
-    // let fails = (0..queries.len())
-    //     .filter(|&i| bvh_results[i].unwrap().0 != bf_results[i].unwrap().0)
-    //     .collect_vec();
-    // println!(
-    //     "BVH CUDA and Brute Force CUDA find different NNs on {} queries",
-    //     fails.len()
-    // );
+    let fails = (0..queries.len())
+        .filter(|&i| bvh_results[i].unwrap().0 != bf_results[i].unwrap().0)
+        .collect_vec();
+    println!(
+        "BVH CUDA and Brute Force CUDA find different NNs on {} queries",
+        fails.len()
+    );
 
-    // let fails = (0..queries.len())
-    //     .filter(|&i| {
-    //         (bvh_results[i].unwrap().1.sqrt() -
-    // bf_results[i].unwrap().1.sqrt()).abs()             > f32::EPSILON
-    //     })
-    //     .collect_vec();
-    // println!(
-    //     "BVH CUDA and Brute Force CUDA find different NN dists on {} queries",
-    //     fails.len()
-    // );
+    let fails = (0..queries.len())
+        .filter(|&i| {
+            (bvh_results[i].unwrap().1.sqrt() - bf_results[i].unwrap().1.sqrt()).abs()
+                > f32::EPSILON
+        })
+        .collect_vec();
+    println!(
+        "BVH CUDA and Brute Force CUDA find different NN dists on {} queries",
+        fails.len()
+    );
 
     // let fails = (0..queries.len())
     //     .filter(|&i| bvh_results[i].unwrap().0 !=

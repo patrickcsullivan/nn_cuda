@@ -96,7 +96,7 @@ pub fn brute_force(
 
     let _ctx = cust::quick_init()?;
     let module = Module::from_ptx(PTX, &[])?;
-    let kernel = module.get_function("brute_force")?;
+    let kernel = module.get_function("brute_force_shared_mem")?;
     let stream = Stream::new(StreamFlags::NON_BLOCKING, None)?;
 
     // Allocate memory on the GPU.

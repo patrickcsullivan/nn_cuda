@@ -1,4 +1,4 @@
-use cuda_std::{prelude::*, vek::Vec3};
+use cuda_std::{prelude::*, shared_array, vek::Vec3};
 
 use crate::{
     aabb::DeviceCopyAabb,
@@ -124,7 +124,7 @@ fn get_aabb(
 
 #[kernel]
 #[allow(improper_ctypes_definitions, clippy::missing_safety_doc)]
-pub unsafe fn brute_force(
+pub unsafe fn brute_force_shared_mem(
     leaf_object_indices: &[ObjectIndex],
     leaf_aabbs: &[DeviceCopyAabb<f32>],
     //------
@@ -134,13 +134,26 @@ pub unsafe fn brute_force(
     results_distances_squared: *mut f32,
 ) {
     let mut tid = (thread::thread_idx_x() + thread::block_idx_x() * thread::block_dim_x()) as usize;
+
+    let leaf_aabbs_cache = shared_array![DeviceCopyAabb<f32>; CACHE_SIZE];
+
     while tid < queries.len() {
         let query = queries[tid];
         let mut nn_object_index = ObjectIndex(0);
         let mut nn_dist = f32::INFINITY;
 
         for leaf_index in 0..leaf_object_indices.len() {
-            let aabb = leaf_aabbs[leaf_index];
+            let cache_index = leaf_index % CACHE_SIZE;
+
+            if leaf_index % CACHE_SIZE == 0 {
+                thread::sync_threads();
+                copy_into_cache(leaf_aabbs, leaf_aabbs_cache, leaf_index);
+                thread::sync_threads();
+            }
+
+            // let cycled_cache_index = (cache_index + thread::thread_idx_x() as usize) %
+            // CACHE_SIZE; let aabb = *leaf_aabbs_cache.add(cycled_cache_index);
+            let aabb = *leaf_aabbs_cache.add(cache_index);
             let dist = aabb.distance_squared_to_point(query);
             if dist < nn_dist {
                 nn_object_index = leaf_object_indices[leaf_index];
@@ -156,3 +169,18 @@ pub unsafe fn brute_force(
         tid += (thread::block_dim_x() * thread::grid_dim_x()) as usize;
     }
 }
+
+unsafe fn copy_into_cache(
+    leaf_aabbs: &[DeviceCopyAabb<f32>],
+    leaf_aabbs_cache: *mut DeviceCopyAabb<f32>,
+    leaf_aabbs_start_index: usize,
+) {
+    let mut cache_index = thread::thread_idx_x() as usize;
+
+    while cache_index < CACHE_SIZE && leaf_aabbs_start_index + cache_index < leaf_aabbs.len() {
+        *leaf_aabbs_cache.add(cache_index) = leaf_aabbs[leaf_aabbs_start_index + cache_index];
+        cache_index += thread::block_dim_x() as usize;
+    }
+}
+
+const CACHE_SIZE: usize = 128;
