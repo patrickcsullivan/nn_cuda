@@ -1,11 +1,11 @@
 use std::fmt::Debug;
 
 use crate::morton::map_to_morton_codes;
-use cuda_std::vek::{Aabb, Vec3};
-use gpu::{
+use bvh_gpu::{
     aabb::DeviceCopyAabb,
     bvh::{InternalNodeIndex, LeafNodeIndex, NodeIndex, ObjectIndex},
 };
+use cuda_std::vek::{Aabb, Vec3};
 use itertools::Itertools;
 
 #[derive(Debug)]
@@ -184,8 +184,8 @@ fn find_split(sorted_morton_codes: &[u32], first: usize, last: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::Bvh;
+    use bvh_gpu::aabb::DeviceCopyAabb;
     use cuda_std::vek::Vec3;
-    use gpu::aabb::DeviceCopyAabb;
     use itertools::Itertools;
 
     #[test]

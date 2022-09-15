@@ -1,11 +1,11 @@
 use crate::bvh::Bvh;
+use bvh_gpu::{aabb::DeviceCopyAabb, bvh::ObjectIndex};
 use cuda_std::vek::Vec3;
 use cust::prelude::*;
-use gpu::{aabb::DeviceCopyAabb, bvh::ObjectIndex};
 use itertools::Itertools;
 use std::error::Error;
 
-static PTX: &str = include_str!("../../resources/gpu.ptx");
+static PTX: &str = include_str!("../../resources/bvh_gpu.ptx");
 
 pub fn find_nn(
     bvh: &Bvh,

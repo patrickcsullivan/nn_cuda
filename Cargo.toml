@@ -1,8 +1,8 @@
 [workspace]
 members = [
   "app",
-  "cpu",
-  "gpu",
+  "bvh_cpu",
+  "bvh_gpu",
 ]
 
 [profile.dev.package.rustc_codegen_nvvm]

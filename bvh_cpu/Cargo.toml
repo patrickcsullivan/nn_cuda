@@ -1,12 +1,12 @@
 [package]
-name = "cpu"
+name = "bvh_cpu"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 cuda_std = "0.2.2"
 cust = "0.3.2"
-gpu = { path = "../gpu" }
+bvh_gpu = { path = "../bvh_gpu" }
 itertools = "0.10.3"
 
 [build-dependencies]

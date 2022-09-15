@@ -1,6 +1,6 @@
 mod dragon;
 
-use cpu::{bvh::Bvh, morton::map_to_morton_codes_tmp};
+use bvh_cpu::{bvh::Bvh, morton::map_to_morton_codes_tmp};
 use cuda_std::vek::{Aabb, Vec3};
 use itertools::Itertools;
 use kiddo::KdTree;
@@ -83,7 +83,7 @@ fn benchmarks(
 
     // Test brute force CUDA.
     let now = Instant::now();
-    let bf_results = cpu::nn::brute_force(&objects, &queries)?;
+    let bf_results = bvh_cpu::nn::brute_force(&objects, &queries)?;
     let elapsed = now.elapsed();
     println!("Brute Force CUDA:\t\t{:.2?}", elapsed);
 
@@ -92,13 +92,13 @@ fn benchmarks(
 
     // Test BVH CUDA.
     let now = Instant::now();
-    let bvh_results = cpu::nn::find_nn(&bvh, &queries)?;
+    let bvh_results = bvh_cpu::nn::find_nn(&bvh, &queries)?;
     let elapsed = now.elapsed();
     println!("BVH CUDA:\t\t\t{:.2?}", elapsed);
 
     // // Test BVH CUDA with sorted queries.
     // let now = Instant::now();
-    // let _bvh_sorted_results = cpu::nn::find_nn(&bvh, &sorted_queries)?;
+    // let _bvh_sorted_results = bvh_cpu::nn::find_nn(&bvh, &sorted_queries)?;
     // let elapsed = now.elapsed();
     // println!("BVH CUDA (sorted queries):\t{:.2?}", elapsed);
 

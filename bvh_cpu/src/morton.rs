@@ -1,5 +1,5 @@
+use bvh_gpu::aabb::DeviceCopyAabb;
 use cuda_std::vek::{Aabb, Vec3};
-use gpu::aabb::DeviceCopyAabb;
 
 pub fn map_to_morton_codes_tmp(points: &[Vec3<f32>], aabb: &Aabb<f32>) -> Vec<u32> {
     let aabb = DeviceCopyAabb {
