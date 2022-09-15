@@ -2,7 +2,7 @@ use cuda_std::{prelude::*, vek::Vec3};
 
 use crate::{
     aabb::DeviceCopyAabb,
-    bvh::{NodeIndex, ObjectIndex},
+    bvh::{InternalNodeIndex, LeafNodeIndex, NodeIndex, ObjectIndex},
     stack::Stack,
 };
 
@@ -68,13 +68,13 @@ pub fn find_nn_for_query(
 
     while let Some((node_index, dist_squared)) = traversal_stack.pop() {
         match node_index {
-            NodeIndex::Leaf(leaf_index) => {
+            NodeIndex::Leaf(LeafNodeIndex(leaf_index)) => {
                 if dist_squared < nn_dist_squared {
                     nn_object_index = leaf_object_indices[leaf_index];
                     nn_dist_squared = dist_squared;
                 }
             }
-            NodeIndex::Internal(internal_index) => {
+            NodeIndex::Internal(InternalNodeIndex(internal_index)) => {
                 let left_child_index = internal_left_child_indicies[internal_index];
                 let right_child_index = internal_right_child_indicies[internal_index];
 
@@ -117,8 +117,8 @@ fn get_aabb(
     node_index: NodeIndex,
 ) -> DeviceCopyAabb<f32> {
     match node_index {
-        NodeIndex::Leaf(leaf_index) => leaf_aabbs[leaf_index],
-        NodeIndex::Internal(internal_index) => internal_aabbs[internal_index],
+        NodeIndex::Leaf(LeafNodeIndex(leaf_index)) => leaf_aabbs[leaf_index],
+        NodeIndex::Internal(InternalNodeIndex(internal_index)) => internal_aabbs[internal_index],
     }
 }
 

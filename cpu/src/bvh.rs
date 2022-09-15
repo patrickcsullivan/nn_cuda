@@ -4,7 +4,7 @@ use crate::morton::map_to_morton_codes;
 use cuda_std::vek::{Aabb, Vec3};
 use gpu::{
     aabb::DeviceCopyAabb,
-    bvh::{NodeIndex, ObjectIndex},
+    bvh::{InternalNodeIndex, LeafNodeIndex, NodeIndex, ObjectIndex},
 };
 use itertools::Itertools;
 
@@ -98,12 +98,12 @@ fn flatten(
             let right_index = flatten(*right, internal_nodes);
             let index = internal_nodes.len();
             internal_nodes.push((left_index, right_index, aabb));
-            NodeIndex::Internal(index)
+            NodeIndex::Internal(InternalNodeIndex(index))
         }
         Node::Leaf {
             sorted_object_indices_index,
             aabb: _,
-        } => NodeIndex::Leaf(sorted_object_indices_index),
+        } => NodeIndex::Leaf(LeafNodeIndex(sorted_object_indices_index)),
     }
 }
 
