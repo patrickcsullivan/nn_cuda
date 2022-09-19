@@ -1,4 +1,5 @@
 use crate::morton::map_to_morton_codes_tmp;
+use core::num;
 use cuda_std::vek::{Aabb, Vec3};
 use cust::prelude::*;
 use itertools::Itertools;
@@ -37,7 +38,17 @@ impl Partitions {
         let sorted_object_ys = sorted_object_vecs.iter().map(|v| v.y).collect_vec();
         let sorted_object_zs = sorted_object_vecs.iter().map(|v| v.z).collect_vec();
 
-        let partition_size = objects.len() / PARTITIONS_COUNT;
+        // When the objects cannot be divided into even partitions, make all partitions
+        // but the last even.
+        let partition_size = if objects.len() % PARTITIONS_COUNT == 0 {
+            objects.len() / PARTITIONS_COUNT
+        } else {
+            let last_partition_size = objects.len() % (PARTITIONS_COUNT - 1);
+            (objects.len() - last_partition_size) / (PARTITIONS_COUNT - 1)
+        };
+
+        println!("Partition size: {}", partition_size);
+
         let mut partition_min_xs = Vec::with_capacity(PARTITIONS_COUNT);
         let mut partition_min_ys = Vec::with_capacity(PARTITIONS_COUNT);
         let mut partition_min_zs = Vec::with_capacity(PARTITIONS_COUNT);
@@ -157,6 +168,10 @@ fn get_aabb(vecs: &[Vec3<f32>]) -> Aabb<f32> {
         aabb.expand_to_contain_point(*v)
     }
     aabb
+}
+
+fn div_ceil(numerator: usize, denominator: usize) -> usize {
+    (numerator + denominator - 1) / denominator
 }
 
 pub trait HasVec3 {

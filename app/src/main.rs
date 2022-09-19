@@ -201,6 +201,15 @@ fn benchmarks(
         fails.len()
     );
 
+    let no_nn = partition_results
+        .iter()
+        .filter(|r| r.is_none())
+        .collect_vec();
+    println!(
+        "Partitions CUDA does not find NN for {} queries",
+        no_nn.len()
+    );
+
     // let fails = (0..queries.len())
     //     .filter(|&i| bvh_results[i].unwrap().0 !=
     // rtree_results_mt[i].unwrap().index)     .collect_vec();
