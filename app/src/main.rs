@@ -4,6 +4,7 @@ use bvh_cpu::{bvh::Bvh, morton::map_to_morton_codes_tmp};
 use cuda_std::vek::{Aabb, Vec3};
 use itertools::Itertools;
 use kiddo::KdTree;
+use partition_search_cpu::partition::{HasVec3, Partitions};
 use rayon::prelude::*;
 use rstar::{PointDistance, RTree, RTreeObject};
 use std::{env, error::Error, time::Instant};
@@ -96,6 +97,14 @@ fn benchmarks(
     let elapsed = now.elapsed();
     println!("BVH CUDA:\t\t\t{:.2?}", elapsed);
 
+    // Test partition search CUDA.
+    let partition_objs = objects.iter().map(|&v| PartitionObj(v)).collect_vec();
+    let partitions = Partitions::new(&partition_objs, aabb);
+    let now = Instant::now();
+    let partition_results = partitions.find_nns(&queries)?;
+    let elapsed = now.elapsed();
+    println!("Brute Force CUDA:\t\t{:.2?}", elapsed);
+
     // // Test BVH CUDA with sorted queries.
     // let now = Instant::now();
     // let _bvh_sorted_results = bvh_cpu::nn::find_nn(&bvh, &sorted_queries)?;
@@ -176,6 +185,25 @@ fn benchmarks(
         fails.len()
     );
 
+    let fails = (0..queries.len())
+        .filter(|&i| partition_results[i].unwrap().0 != bf_results[i].unwrap().0)
+        .collect_vec();
+    println!(
+        "Partitions CUDA and Brute Force CUDA find different NNs on {} queries",
+        fails.len()
+    );
+
+    let fails = (0..queries.len())
+        .filter(|&i| {
+            (partition_results[i].unwrap().1.sqrt() - bf_results[i].unwrap().1.sqrt()).abs()
+                > f32::EPSILON
+        })
+        .collect_vec();
+    println!(
+        "Partitions CUDA and Brute Force CUDA find different NN dists on {} queries",
+        fails.len()
+    );
+
     // let fails = (0..queries.len())
     //     .filter(|&i| bvh_results[i].unwrap().0 !=
     // rtree_results_mt[i].unwrap().index)     .collect_vec();
@@ -232,4 +260,12 @@ fn get_aabb(vs: &[Vec3<f32>]) -> Aabb<f32> {
         aabb.expand_to_contain_point(*v);
     }
     aabb
+}
+
+struct PartitionObj(Vec3<f32>);
+
+impl HasVec3 for PartitionObj {
+    fn vec3(&self) -> Vec3<f32> {
+        self.0
+    }
 }

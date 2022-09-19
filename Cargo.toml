@@ -3,6 +3,8 @@ members = [
   "app",
   "bvh_cpu",
   "bvh_gpu",
+  "partition_search_cpu",
+  "partition_search_gpu",
   "rtree_cpu",
   "rtree_gpu"
 ]
