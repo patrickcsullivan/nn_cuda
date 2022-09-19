@@ -79,7 +79,7 @@ impl Partitions {
     ) -> Result<Vec<Option<(usize, f32)>>, Box<dyn Error>> {
         // Allocate memory on the CPU.
         let mut result_object_indices = vec![0usize; queries.len()];
-        let mut result_dist2s = vec![0.0f32; queries.len()];
+        let mut result_dist2s = vec![f32::INFINITY; queries.len()];
 
         let _ctx = cust::quick_init()?;
         let module = Module::from_ptx(PTX, &[])?;
@@ -115,6 +115,7 @@ impl Partitions {
                     dev_sorted_object_zs.as_device_ptr(),
                     dev_sorted_object_zs.len(),
                     //-----
+                    self.partition_size,
                     dev_partition_min_xs.as_device_ptr(),
                     dev_partition_min_xs.len(),
                     dev_partition_min_ys.as_device_ptr(),

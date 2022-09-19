@@ -103,7 +103,7 @@ fn benchmarks(
     let now = Instant::now();
     let partition_results = partitions.find_nns(&queries)?;
     let elapsed = now.elapsed();
-    println!("Brute Force CUDA:\t\t{:.2?}", elapsed);
+    println!("Partition Search CUDA:\t\t{:.2?}", elapsed);
 
     // // Test BVH CUDA with sorted queries.
     // let now = Instant::now();
@@ -186,7 +186,7 @@ fn benchmarks(
     );
 
     let fails = (0..queries.len())
-        .filter(|&i| partition_results[i].unwrap().0 != bf_results[i].unwrap().0)
+        .filter(|&i| partition_results[i].map(|r| r.0) != bf_results[i].map(|r| r.0))
         .collect_vec();
     println!(
         "Partitions CUDA and Brute Force CUDA find different NNs on {} queries",
@@ -194,10 +194,7 @@ fn benchmarks(
     );
 
     let fails = (0..queries.len())
-        .filter(|&i| {
-            (partition_results[i].unwrap().1.sqrt() - bf_results[i].unwrap().1.sqrt()).abs()
-                > f32::EPSILON
-        })
+        .filter(|&i| (partition_results[i].map(|r| r.1) != bf_results[i].map(|r| r.1)))
         .collect_vec();
     println!(
         "Partitions CUDA and Brute Force CUDA find different NN dists on {} queries",
