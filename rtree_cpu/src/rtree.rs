@@ -48,7 +48,8 @@ impl RTree {
             let level_size = tree.sizes[level_index];
             let level_first_node_index = prefix_sum(&tree.sizes, level_index);
 
-            for node_index in 
+            // TODO: Continue here.
+            // for node_index in
         }
 
         tree.build_level(0, n);
