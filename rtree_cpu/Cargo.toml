@@ -1,0 +1,13 @@
+[package]
+name = "rtree_cpu"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cuda_std = "0.2.2"
+cust = "0.3.2"
+rtree_gpu = { path = "../rtree_gpu" }
+itertools = "0.10.3"
+
+[build-dependencies]
+cuda_builder = "0.3.0"

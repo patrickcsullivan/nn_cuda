@@ -3,6 +3,8 @@ members = [
   "app",
   "bvh_cpu",
   "bvh_gpu",
+  "rtree_cpu",
+  "rtree_gpu"
 ]
 
 [profile.dev.package.rustc_codegen_nvvm]
