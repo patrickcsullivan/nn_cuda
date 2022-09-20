@@ -134,47 +134,51 @@ unsafe fn partition_search(
 
     while *next_partition_idx < PARTITIONS_COUNT {
         let partition_idx = *next_partition_idx;
-        let sorted_data_from = partition_idx * partition_size;
-        let sorted_data_to =
-            ((partition_idx + 1) * partition_size).min(sorted_object_indices.len());
 
-        // Loop through each point in partition, checking to see if it's the NN.
-        for sorted_data_idx in sorted_data_from..sorted_data_to {
-            let cache_idx = (sorted_data_idx - sorted_data_from) % OBJECTS_CACHE_SIZE;
+        // Every thread in the block searches the partition with the most votes.
+        if partition_idx < PARTITIONS_COUNT {
+            let sorted_data_from = partition_idx * partition_size;
+            let sorted_data_to =
+                ((partition_idx + 1) * partition_size).min(sorted_object_indices.len());
 
-            // If we're trying to examine the first point in the cache, then scan forward
-            // and load the cache.
-            if cache_idx == 0 {
-                thread::sync_threads();
-                let mut look_ahead_idx = thread::thread_idx_x() as usize;
-                while look_ahead_idx < OBJECTS_CACHE_SIZE
-                    && sorted_data_idx + look_ahead_idx < sorted_data_to
-                {
-                    *shared_sorted_object_xs.add(look_ahead_idx) =
-                        sorted_object_xs[sorted_data_idx + look_ahead_idx];
-                    *shared_sorted_object_ys.add(look_ahead_idx) =
-                        sorted_object_ys[sorted_data_idx + look_ahead_idx];
-                    *shared_sorted_object_zs.add(look_ahead_idx) =
-                        sorted_object_zs[sorted_data_idx + look_ahead_idx];
-                    look_ahead_idx += thread::block_dim_x() as usize;
+            // Loop through each point in partition, checking to see if it's the NN.
+            for sorted_data_idx in sorted_data_from..sorted_data_to {
+                let cache_idx = (sorted_data_idx - sorted_data_from) % OBJECTS_CACHE_SIZE;
+
+                // If we're trying to examine the first point in the cache, then scan forward
+                // and load the cache.
+                if cache_idx == 0 {
+                    thread::sync_threads();
+                    let mut look_ahead_idx = thread::thread_idx_x() as usize;
+                    while look_ahead_idx < OBJECTS_CACHE_SIZE
+                        && sorted_data_idx + look_ahead_idx < sorted_data_to
+                    {
+                        *shared_sorted_object_xs.add(look_ahead_idx) =
+                            sorted_object_xs[sorted_data_idx + look_ahead_idx];
+                        *shared_sorted_object_ys.add(look_ahead_idx) =
+                            sorted_object_ys[sorted_data_idx + look_ahead_idx];
+                        *shared_sorted_object_zs.add(look_ahead_idx) =
+                            sorted_object_zs[sorted_data_idx + look_ahead_idx];
+                        look_ahead_idx += thread::block_dim_x() as usize;
+                    }
+                    thread::sync_threads();
                 }
-                thread::sync_threads();
-            }
 
-            let x = *shared_sorted_object_xs.add(cache_idx);
-            let y = *shared_sorted_object_ys.add(cache_idx);
-            let z = *shared_sorted_object_zs.add(cache_idx);
-            let dist2 = dist2_to_point(query, x, y, z);
-            if dist2 < nn_dist2 {
-                nn_object_idx = sorted_object_indices[sorted_data_idx];
-                nn_dist2 = dist2;
+                let x = *shared_sorted_object_xs.add(cache_idx);
+                let y = *shared_sorted_object_ys.add(cache_idx);
+                let z = *shared_sorted_object_zs.add(cache_idx);
+                let dist2 = dist2_to_point(query, x, y, z);
+                if dist2 < nn_dist2 {
+                    nn_object_idx = sorted_object_indices[sorted_data_idx];
+                    nn_dist2 = dist2;
+                }
             }
         }
 
         // Temporary
         thread::sync_threads();
         if thread::thread_idx_x() as usize == 0 {
-            *next_partition_idx = *next_partition_idx + 1;
+            *next_partition_idx = partition_idx + 1;
         }
         thread::sync_threads();
     }
@@ -246,44 +250,6 @@ unsafe fn partition_search(
     //     let sorted_data_to =
     //         ((*next_partition_idx + 1) *
     // partition_size).min(sorted_object_indices.len());
-
-    //     // Loop through each point in partition, checking to see if it's the NN.
-    //     for sorted_data_idx in sorted_data_from..sorted_data_to {
-    //         // let idx_in_partition = sorted_data_idx - sorted_data_from;
-    //         // let cache_idx = idx_in_partition % OBJECTS_CACHE_SIZE;
-
-    //         // // If we're trying to examine the first point in the cache, then
-    // load the         // cache // first.
-    //         // if cache_idx == 0 {
-    //         //     thread::sync_threads();
-    //         //     let mut loader_idx = thread::thread_idx_x() as usize;
-    //         //     while loader_idx < OBJECTS_CACHE_SIZE
-    //         //         && sorted_data_idx + loader_idx < sorted_data_to
-    //         //     {
-    //         //         *shared_sorted_object_xs.add(loader_idx) =
-    //         //             sorted_object_xs[sorted_data_idx + loader_idx];
-    //         //         *shared_sorted_object_ys.add(loader_idx) =
-    //         //             sorted_object_ys[sorted_data_idx + loader_idx];
-    //         //         *shared_sorted_object_zs.add(loader_idx) =
-    //         //             sorted_object_zs[sorted_data_idx + loader_idx];
-    //         //         loader_idx += thread::block_dim_x() as usize;
-    //         //     }
-    //         //     thread::sync_threads();
-    //         // }
-
-    //         let x = sorted_object_xs[sorted_data_idx];
-    //         let y = sorted_object_ys[sorted_data_idx];
-    //         let z = sorted_object_zs[sorted_data_idx];
-    //         // let x = *shared_sorted_object_xs.add(cache_idx);
-    //         // let y = *shared_sorted_object_ys.add(cache_idx);
-    //         // let z = *shared_sorted_object_zs.add(cache_idx);
-    //         let dist2 = dist2_to_point(query, x, y, z);
-    //         if dist2 < nn_dist2 {
-    //             nn_object_idx = sorted_object_indices[sorted_data_idx];
-    //             nn_dist2 = dist2;
-    //         }
-    //     }
-    //     // }
 
     // }
 
