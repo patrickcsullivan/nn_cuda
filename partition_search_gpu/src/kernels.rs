@@ -132,7 +132,8 @@ unsafe fn partition_search(
     let mut nn_object_idx = usize::MAX;
     let mut nn_dist2 = f32::INFINITY;
 
-    for partition_idx in 0..PARTITIONS_COUNT {
+    while *next_partition_idx < PARTITIONS_COUNT {
+        let partition_idx = *next_partition_idx;
         let sorted_data_from = partition_idx * partition_size;
         let sorted_data_to =
             ((partition_idx + 1) * partition_size).min(sorted_object_indices.len());
@@ -148,6 +149,13 @@ unsafe fn partition_search(
                 nn_dist2 = dist2;
             }
         }
+
+        // Temporary
+        thread::sync_threads();
+        if thread::thread_idx_x() as usize == 0 {
+            *next_partition_idx = *next_partition_idx + 1;
+        }
+        thread::sync_threads();
     }
 
     // while *next_partition_idx < PARTITIONS_COUNT {
@@ -256,10 +264,6 @@ unsafe fn partition_search(
     //     }
     //     // }
 
-    //     // Temporary
-    //     thread::sync_threads();
-    //     *next_partition_idx = *next_partition_idx + 1;
-    //     thread::sync_threads();
     // }
 
     (nn_object_idx, nn_dist2)
