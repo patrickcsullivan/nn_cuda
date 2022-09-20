@@ -72,19 +72,19 @@ fn benchmarks(
     println!("{} objects", objects.len());
     println!("{} queries", queries.len());
 
-    // // Radix sort queries.
-    // let queries_aabb = get_aabb(queries);
-    // let morton_codes = map_to_morton_codes_tmp(queries, &queries_aabb);
-    // let mut sorted_query_indices = (0..queries.len()).collect_vec();
-    // sorted_query_indices.sort_by_key(|&i| morton_codes[i]);
-    // let sorted_queries = sorted_query_indices
-    //     .into_iter()
-    //     .map(|i| queries[i])
-    //     .collect_vec();
+    // Radix sort queries.
+    let queries_aabb = get_aabb(queries);
+    let morton_codes = map_to_morton_codes_tmp(queries, &queries_aabb);
+    let mut sorted_query_indices = (0..queries.len()).collect_vec();
+    sorted_query_indices.sort_by_key(|&i| morton_codes[i]);
+    let sorted_queries = sorted_query_indices
+        .into_iter()
+        .map(|i| queries[i])
+        .collect_vec();
 
     // Test brute force CUDA.
     let now = Instant::now();
-    let bf_results = bvh_cpu::nn::brute_force(&objects, &queries)?;
+    let bf_results = bvh_cpu::nn::brute_force(&objects, &sorted_queries)?;
     let elapsed = now.elapsed();
     println!("Brute Force CUDA:\t\t{:.2?}", elapsed);
 
@@ -93,7 +93,7 @@ fn benchmarks(
 
     // Test BVH CUDA.
     let now = Instant::now();
-    let bvh_results = bvh_cpu::nn::find_nn(&bvh, &queries)?;
+    let bvh_results = bvh_cpu::nn::find_nn(&bvh, &sorted_queries)?;
     let elapsed = now.elapsed();
     println!("BVH CUDA:\t\t\t{:.2?}", elapsed);
 
@@ -101,7 +101,7 @@ fn benchmarks(
     let partition_objs = objects.iter().map(|&v| PartitionObj(v)).collect_vec();
     let partitions = Partitions::new(&partition_objs, aabb);
     let now = Instant::now();
-    let partition_results = partitions.find_nns(&queries)?;
+    let partition_results = partitions.find_nns(&sorted_queries)?;
     let elapsed = now.elapsed();
     println!("Partition Search CUDA:\t\t{:.2?}", elapsed);
 

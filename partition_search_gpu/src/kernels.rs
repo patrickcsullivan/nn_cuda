@@ -1,7 +1,7 @@
 use cuda_std::{prelude::*, shared_array, vek::Vec3};
 
-pub const PARTITIONS_COUNT: usize = 400;
-const OBJECTS_CACHE_SIZE: usize = 256;
+pub const PARTITIONS_COUNT: usize = 400; // 16 bytes per partition
+const OBJECTS_CACHE_SIZE: usize = 256; // 12 bytes per object
 
 #[kernel]
 #[allow(improper_ctypes_definitions, clippy::missing_safety_doc)]
@@ -62,7 +62,6 @@ pub unsafe fn partition_search_for_queries(
         let query = queries[grid_thread_idx];
 
         let (nn_obj_idx, nn_dist2) = partition_search(
-            grid_thread_idx,
             sorted_object_indices,
             sorted_object_xs,
             sorted_object_ys,
@@ -90,8 +89,6 @@ pub unsafe fn partition_search_for_queries(
 }
 
 unsafe fn partition_search(
-    grid_thread_idx: usize,
-    //-----
     sorted_object_indices: &[usize],
     sorted_object_xs: &[f32],
     sorted_object_ys: &[f32],

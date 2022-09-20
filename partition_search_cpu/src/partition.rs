@@ -1,5 +1,4 @@
 use crate::morton::map_to_morton_codes_tmp;
-use core::num;
 use cuda_std::vek::{Aabb, Vec3};
 use cust::prelude::*;
 use itertools::Itertools;
