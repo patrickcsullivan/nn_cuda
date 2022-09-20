@@ -162,6 +162,43 @@ unsafe fn partition_search(
         // Wait until all threads have finished voting on the next partition to search.
         thread::sync_threads();
 
+        // Use the 0-th thread in the block to find the partition with the most votes
+        // and to reset vote counts for the next iteration of the main loop.
+        if thread::thread_idx_x() as usize == 0 {
+            let mut max_votes_idx = 0;
+            let mut max_votes_count = 0;
+            for p_idx in 0..PARTITIONS_COUNT {
+                let votes_count = *partition_votes.add(p_idx);
+
+                // If the partition hasn't been visited yet...
+                if votes_count < usize::MAX {
+                    // Save the partition if it has the most votes so far.
+                    if votes_count > max_votes_count {
+                        max_votes_idx = p_idx;
+                        max_votes_count = votes_count;
+                    }
+
+                    // Reset the partition's votes count.
+                    *partition_votes.add(p_idx) = 0;
+                }
+            }
+
+            // Mark the winning partition as visited so that we don't check it in future
+            // iterations of the main loop.
+            *partition_votes.add(max_votes_idx) = usize::MAX;
+
+            // Record the index of the winning partition to shared memory. If no votes were
+            // case, use usize::MAX to indicate that there is no next partition to search.
+            *next_partition_idx = if max_votes_count > 0 {
+                max_votes_idx
+            } else {
+                usize::MAX
+            };
+        }
+
+        // Wait until the next partition has been selected..
+        thread::sync_threads();
+
         let partition_idx = *next_partition_idx;
 
         // Every thread in the block searches the partition with the most votes.
@@ -203,85 +240,7 @@ unsafe fn partition_search(
                 }
             }
         }
-
-        // Temporary
-        thread::sync_threads();
-        if thread::thread_idx_x() as usize == 0 {
-            *partition_votes.add(partition_idx) = usize::MAX;
-            *next_partition_idx = partition_idx + 1;
-        }
-        thread::sync_threads();
     }
-
-    // while *next_partition_idx < PARTITIONS_COUNT {
-    //     // while *next_partition_idx < usize::MAX {
-    //     //     // Find partitions that could contain the NN and vote on them.
-    //     //     for p_idx in 0..PARTITIONS_COUNT {
-    //     //         // When partition_votes[p_idx] is usize::MAX, the partition
-    // has     // already been         // searched, so we don't want to check it
-    // again.     //         if *(partition_votes.add(p_idx)) < usize::MAX {
-    //     //             let dist2 = dist2_to_aabb(
-    //     //                 query,
-    //     //                 *partition_min_xs.add(p_idx),
-    //     //                 *partition_min_ys.add(p_idx),
-    //     //                 *partition_min_zs.add(p_idx),
-    //     //                 *partition_max_xs.add(p_idx),
-    //     //                 *partition_max_ys.add(p_idx),
-    //     //                 *partition_max_zs.add(p_idx),
-    //     //             );
-    //     //             if dist2 < nn_dist2 {
-    //     //                 // Unsynchronized reads and writes to partition_votes
-    // could     // result in race                 // conditions and inaccurate
-    // vote counts,     // but this is ok since the vote counts
-    // // don't need to be     // exact.
-    // *partition_votes.add(p_idx) =     // *partition_votes.add(p_idx) + 1;
-    // }     //         }
-    //     //     }
-
-    //     //     // Wait until all threads have finished voting on the next
-    // partition to     // search.     thread::sync_threads();
-
-    //     //     // Use the 0-th thread to find the partition with the most votes.
-    //     //     if grid_thread_idx == 0 {
-    //     //         let mut max_votes_idx = 0;
-    //     //         let mut max_votes_count = 0;
-
-    //     //         for p_idx in 0..PARTITIONS_COUNT {
-    //     //             let votes_count = *partition_votes.add(p_idx);
-
-    //     //             // If the partition hasn't been visited yet...
-    //     //             if votes_count < usize::MAX {
-    //     //                 // Save the partition if it has the most votes so far.
-    //     //                 if votes_count > max_votes_count {
-    //     //                     max_votes_idx = p_idx;
-    //     //                     max_votes_count = votes_count;
-    //     //                 }
-
-    //     //                 // Reset the partition's votes count.
-    //     //                 *partition_votes.add(p_idx) = 0;
-    //     //             }
-    //     //         }
-
-    //     //         // Record the vote winner, or use usize::MAX to indicate that
-    // no     // partition         // received any votes.
-    //     //         *next_partition_idx = if max_votes_count > 0 {
-    //     //             max_votes_idx
-    //     //         } else {
-    //     //             usize::MAX
-    //     //         };
-    //     //     }
-
-    //     //     // Wait until votes for the next partition have been counted.
-    //     //     thread::sync_threads();
-
-    //     // Every thread in the block searches the partition with the most votes.
-    //     // if *next_partition_idx < usize::MAX {
-    //     let sorted_data_from = *next_partition_idx * partition_size;
-    //     let sorted_data_to =
-    //         ((*next_partition_idx + 1) *
-    // partition_size).min(sorted_object_indices.len());
-
-    // }
 
     (nn_object_idx, nn_dist2)
 }
