@@ -111,17 +111,17 @@ fn benchmarks(
     // let elapsed = now.elapsed();
     // println!("BVH CUDA (sorted queries):\t{:.2?}", elapsed);
 
-    // // Build RTree and RTree queries.
-    // let rtree_objects = objects
-    //     .iter()
-    //     .enumerate()
-    //     .map(|(i, o)| IndexedPoint {
-    //         index: i,
-    //         point: [o.x, o.y, o.z],
-    //     })
-    //     .collect_vec();
-    // let rtree_queries = queries.iter().map(|q| [q.x, q.y, q.z]).collect_vec();
-    // let rtree = RTree::bulk_load(rtree_objects);
+    // Build RTree and RTree queries.
+    let rtree_objects = objects
+        .iter()
+        .enumerate()
+        .map(|(i, o)| IndexedPoint {
+            index: i,
+            point: [o.x, o.y, o.z],
+        })
+        .collect_vec();
+    let rtree_queries = queries.iter().map(|q| [q.x, q.y, q.z]).collect_vec();
+    let rtree = RTree::bulk_load(rtree_objects);
 
     // // Test with RTree single-threaded.
     // let now = Instant::now();
@@ -132,14 +132,14 @@ fn benchmarks(
     // let elapsed = now.elapsed();
     // println!("rstar (1-core):\t\t\t{:.2?}", elapsed);
 
-    // // Test with RTree multi-threaded.
-    // let now = Instant::now();
-    // let rtree_results_mt: Vec<_> = rtree_queries
-    //     .par_iter()
-    //     .map(|q| rtree.nearest_neighbor(q))
-    //     .collect();
-    // let elapsed = now.elapsed();
-    // println!("rstar (8-core):\t\t\t{:.2?}", elapsed);
+    // Test with RTree multi-threaded.
+    let now = Instant::now();
+    let rtree_results_mt: Vec<_> = rtree_queries
+        .par_iter()
+        .map(|q| rtree.nearest_neighbor(q))
+        .collect();
+    let elapsed = now.elapsed();
+    println!("rstar (8-core):\t\t\t{:.2?}", elapsed);
 
     // // Build KDTree and KDTree queries.
     // let kdtree_queries = queries.iter().map(|q| [q.x, q.y, q.z]).collect_vec();

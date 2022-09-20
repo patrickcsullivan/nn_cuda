@@ -200,13 +200,14 @@ unsafe fn partition_search(
 
         // Every thread in the block searches the partition with the most votes.
         if partition_idx < PARTITIONS_COUNT {
-            let sorted_data_from = partition_idx * partition_size;
-            let sorted_data_to =
+            // Calculate the partition's start and end indices in the sorted_object arrays.
+            let partition_from = partition_idx * partition_size;
+            let partition_to =
                 ((partition_idx + 1) * partition_size).min(sorted_object_indices.len());
 
             // Loop through each point in partition, checking to see if it's the NN.
-            for sorted_data_idx in sorted_data_from..sorted_data_to {
-                let cache_idx = (sorted_data_idx - sorted_data_from) % OBJECTS_CACHE_SIZE;
+            for sorted_data_idx in partition_from..partition_to {
+                let cache_idx = (sorted_data_idx - partition_from) % OBJECTS_CACHE_SIZE;
 
                 // If we're trying to examine the first point in the cache, then scan forward
                 // and load the cache.
@@ -214,7 +215,7 @@ unsafe fn partition_search(
                     thread::sync_threads();
                     let mut look_ahead_idx = thread::thread_idx_x() as usize;
                     while look_ahead_idx < OBJECTS_CACHE_SIZE
-                        && sorted_data_idx + look_ahead_idx < sorted_data_to
+                        && sorted_data_idx + look_ahead_idx < partition_to
                     {
                         *shared_sorted_object_xs.add(look_ahead_idx) =
                             sorted_object_xs[sorted_data_idx + look_ahead_idx];
@@ -274,105 +275,49 @@ fn dist2_to_range(val: f32, min: f32, max: f32) -> f32 {
     }
 }
 
-// while *next_partition_idx < usize::MAX {
-//     // Find partitions that could contain the NN and vote on them.
-//     for p_idx in 0..PARTITIONS_COUNT {
-//         // When partition_votes[p_idx] is usize::MAX, the partition has
-// already been         // searched, so we don't want to check it again.
-//         if *(partition_votes.add(p_idx)) < usize::MAX {
-//             let dist2 = dist2_to_aabb(
-//                 query,
-//                 *partition_min_xs.add(p_idx),
-//                 *partition_min_ys.add(p_idx),
-//                 *partition_min_zs.add(p_idx),
-//                 *partition_max_xs.add(p_idx),
-//                 *partition_max_ys.add(p_idx),
-//                 *partition_max_zs.add(p_idx),
-//             );
-//             if dist2 < nn_dist2 {
-//                 // Unsynchronized reads and writes to partition_votes could
-// result in race                 // conditions and inaccurate vote counts,
-// but this is ok since the vote counts                 // don't need to be
-// exact.                 *partition_votes.add(p_idx) =
-// *partition_votes.add(p_idx) + 1;             }
-//         }
-//     }
+fn div_ceil(numerator: usize, denominator: usize) -> usize {
+    (numerator + denominator - 1) / denominator
+}
 
-//     // Wait until all threads have finished voting on the next partition to
-// search.     thread::sync_threads();
+// Calculate the partition's start and end indices in the sorted_object arrays.
+/*
+let partition_from = partition_idx * partition_size;
+let partition_to =
+    ((partition_idx + 1) * partition_size).min(sorted_object_indices.len());
+let partition_size = partition_to - partition_from;
 
-//     // Use the 0-th thread to find the partition with the most votes.
-//     if grid_thread_idx == 0 {
-//         let mut max_votes_idx = 0;
-//         let mut max_votes_count = 0;
+let cache_count = div_ceil(partition_size, OBJECTS_CACHE_SIZE);
+for cache_idx in 0..cache_count {
+    // Calculate the cache's start and end indicies in the sorted_object arrays.
+    let cache_from = partition_from + cache_idx * OBJECTS_CACHE_SIZE;
+    let cache_to =
+        (partition_from + (cache_idx + 1) * OBJECTS_CACHE_SIZE).min(partition_to);
+    let cache_size = cache_to - cache_from;
 
-//         for p_idx in 0..PARTITIONS_COUNT {
-//             let votes_count = *partition_votes.add(p_idx);
+    // Load the cache.
+    thread::sync_threads();
+    let mut look_ahead_idx = thread::thread_idx_x() as usize;
+    while look_ahead_idx < cache_size {
+        *shared_sorted_object_xs.add(look_ahead_idx) =
+            sorted_object_xs[cache_from + look_ahead_idx];
+        *shared_sorted_object_ys.add(look_ahead_idx) =
+            sorted_object_ys[cache_from + look_ahead_idx];
+        *shared_sorted_object_zs.add(look_ahead_idx) =
+            sorted_object_zs[cache_from + look_ahead_idx];
+        look_ahead_idx += thread::block_dim_x() as usize;
+    }
+    thread::sync_threads();
 
-//             // If the partition hasn't been visited yet...
-//             if votes_count < usize::MAX {
-//                 // Save the partition if it has the most votes so far.
-//                 if votes_count > max_votes_count {
-//                     max_votes_idx = p_idx;
-//                     max_votes_count = votes_count;
-//                 }
-
-//                 // Reset the partition's votes count.
-//                 *partition_votes.add(p_idx) = 0;
-//             }
-//         }
-
-//         // Record the vote winner, or use usize::MAX to indicate that no
-// partition         // received any votes.
-//         *next_partition_idx = if max_votes_count > 0 {
-//             max_votes_idx
-//         } else {
-//             usize::MAX
-//         };
-//     }
-
-//     // Wait until votes for the next partition have been counted.
-//     thread::sync_threads();
-
-//     // Every thread in the block searches the partition with the most votes.
-//     if *next_partition_idx < usize::MAX {
-//         let sorted_data_from = *next_partition_idx * partition_size;
-//         let sorted_data_to =
-//             ((*next_partition_idx + 1) *
-// partition_size).min(sorted_object_indices.len());
-
-//         // Loop through each point in partition, checking to see if it's the
-// NN.         for sorted_data_idx in sorted_data_from..sorted_data_to {
-//             let idx_in_partition = sorted_data_idx - sorted_data_from;
-//             let cache_idx = idx_in_partition % OBJECTS_CACHE_SIZE;
-
-//             // If we're trying to examine the first point in the cache, then
-// load the cache             // first.
-//             if cache_idx == 0 {
-//                 thread::sync_threads();
-//                 let mut loader_idx = thread::thread_idx_x() as usize;
-//                 while loader_idx < OBJECTS_CACHE_SIZE
-//                     && sorted_data_idx + loader_idx < sorted_data_to
-//                 {
-//                     *shared_sorted_object_xs.add(loader_idx) =
-//                         sorted_object_xs[sorted_data_idx + loader_idx];
-//                     *shared_sorted_object_ys.add(loader_idx) =
-//                         sorted_object_ys[sorted_data_idx + loader_idx];
-//                     *shared_sorted_object_zs.add(loader_idx) =
-//                         sorted_object_zs[sorted_data_idx + loader_idx];
-//                     loader_idx += thread::block_dim_x() as usize;
-//                 }
-//                 thread::sync_threads();
-//             }
-
-//             let x = *shared_sorted_object_xs.add(cache_idx);
-//             let y = *shared_sorted_object_ys.add(cache_idx);
-//             let z = *shared_sorted_object_zs.add(cache_idx);
-//             let dist2 = dist2_to_point(query, x, y, z);
-//             if dist2 < nn_dist2 {
-//                 nn_object_idx = sorted_object_indices[sorted_data_idx];
-//                 nn_dist2 = dist2;
-//             }
-//         }
-//     }
-// }
+    // Search the loaded cache.
+    for look_ahead_idx in 0..cache_size {
+        let x = *shared_sorted_object_xs.add(look_ahead_idx);
+        let y = *shared_sorted_object_ys.add(look_ahead_idx);
+        let z = *shared_sorted_object_zs.add(look_ahead_idx);
+        let dist2 = dist2_to_point(query, x, y, z);
+        if dist2 < nn_dist2 {
+            nn_object_idx = sorted_object_indices[cache_from + look_ahead_idx];
+            nn_dist2 = dist2;
+        }
+    }
+}
+*/
