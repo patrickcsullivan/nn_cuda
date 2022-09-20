@@ -133,6 +133,35 @@ unsafe fn partition_search(
     let mut nn_dist2 = f32::INFINITY;
 
     while *next_partition_idx < PARTITIONS_COUNT {
+        // Wait until all threads are ready to start voting.
+        thread::sync_threads();
+
+        // Find partitions that could contain the NN and vote on them.
+        for p_idx in 0..PARTITIONS_COUNT {
+            // When partition_votes[p_idx] is usize::MAX, the partition has already been
+            // searched, so we don't want to check it again.
+            if *partition_votes.add(p_idx) < usize::MAX {
+                let dist2 = dist2_to_aabb(
+                    query,
+                    *partition_min_xs.add(p_idx),
+                    *partition_min_ys.add(p_idx),
+                    *partition_min_zs.add(p_idx),
+                    *partition_max_xs.add(p_idx),
+                    *partition_max_ys.add(p_idx),
+                    *partition_max_zs.add(p_idx),
+                );
+                if dist2 < nn_dist2 {
+                    // Unsynchronized reads and writes to partition_votes could result in race
+                    // conditions and inaccurate vote counts, but this is ok as since the vote
+                    // counts don't need to be exact.
+                    *partition_votes.add(p_idx) = *partition_votes.add(p_idx) + 1;
+                }
+            }
+        }
+
+        // Wait until all threads have finished voting on the next partition to search.
+        thread::sync_threads();
+
         let partition_idx = *next_partition_idx;
 
         // Every thread in the block searches the partition with the most votes.
@@ -178,6 +207,7 @@ unsafe fn partition_search(
         // Temporary
         thread::sync_threads();
         if thread::thread_idx_x() as usize == 0 {
+            *partition_votes.add(partition_idx) = usize::MAX;
             *next_partition_idx = partition_idx + 1;
         }
         thread::sync_threads();
