@@ -141,12 +141,12 @@ fn benchmarks(
     let elapsed = now.elapsed();
     println!("rstar (8-core):\t\t\t{:.2?}", elapsed);
 
-    // // Build KDTree and KDTree queries.
-    // let kdtree_queries = queries.iter().map(|q| [q.x, q.y, q.z]).collect_vec();
-    // let mut kdtree = KdTree::new();
-    // for (i, o) in objects.iter().enumerate() {
-    //     kdtree.add(&[o.x, o.y, o.z], i)?;
-    // }
+    // Build KDTree and KDTree queries.
+    let kdtree_queries = queries.iter().map(|q| [q.x, q.y, q.z]).collect_vec();
+    let mut kdtree = KdTree::new();
+    for (i, o) in objects.iter().enumerate() {
+        kdtree.add(&[o.x, o.y, o.z], i)?;
+    }
 
     // // Test with KDTree single-threaded.
     // let now = Instant::now();
@@ -157,14 +157,14 @@ fn benchmarks(
     // let elapsed = now.elapsed();
     // println!("kiddo (1-core):\t\t\t{:.2?}", elapsed);
 
-    // // Test with KDTree multi-threaded.
-    // let now = Instant::now();
-    // let _kdtree_results_mt: Vec<_> = kdtree_queries
-    //     .par_iter()
-    //     .map(|q| kdtree.nearest_one(q, &kiddo::distance::squared_euclidean))
-    //     .collect();
-    // let elapsed = now.elapsed();
-    // println!("kiddo (8-core):\t\t\t{:.2?}", elapsed);
+    // Test with KDTree multi-threaded.
+    let now = Instant::now();
+    let _kdtree_results_mt: Vec<_> = kdtree_queries
+        .par_iter()
+        .map(|q| kdtree.nearest_one(q, &kiddo::distance::squared_euclidean))
+        .collect();
+    let elapsed = now.elapsed();
+    println!("kiddo (8-core):\t\t\t{:.2?}", elapsed);
 
     let fails = (0..queries.len())
         .filter(|&i| bvh_results[i].unwrap().0 != bf_results[i].unwrap().0)

@@ -3,7 +3,7 @@ use cuda_std::vek::{Aabb, Vec3};
 use cust::prelude::*;
 use itertools::Itertools;
 use partition_search_gpu::kernels::PARTITIONS_COUNT;
-use std::error::Error;
+use std::{error::Error, time::Instant};
 
 static PTX: &str = include_str!("../../resources/partition_search_gpu.ptx");
 
@@ -91,12 +91,16 @@ impl Partitions {
         let mut result_object_indices = vec![0usize; queries.len()];
         let mut result_dist2s = vec![f32::INFINITY; queries.len()];
 
+        let now = Instant::now();
         let _ctx = cust::quick_init()?;
         let module = Module::from_ptx(PTX, &[])?;
         let kernel = module.get_function("partition_search_for_queries")?;
         let stream = Stream::new(StreamFlags::NON_BLOCKING, None)?;
+        let elapsed = now.elapsed();
+        println!("\tstarting CUDA:\t{:.2?}", elapsed);
 
         // Allocate memory on the GPU.
+        let now = Instant::now();
         let dev_sorted_object_indices = self.sorted_object_indices.as_slice().as_dbuf()?;
         let dev_sorted_object_xs = self.sorted_object_xs.as_slice().as_dbuf()?;
         let dev_sorted_object_ys = self.sorted_object_ys.as_slice().as_dbuf()?;
@@ -110,9 +114,12 @@ impl Partitions {
         let dev_queries = queries.as_dbuf()?;
         let dev_result_object_indices = result_object_indices.as_slice().as_dbuf()?;
         let dev_result_dist2s = result_dist2s.as_slice().as_dbuf()?;
+        let elapsed = now.elapsed();
+        println!("\thost -> device:\t{:.2?}", elapsed);
 
         let (_, block_size) = kernel.suggested_launch_configuration(0, 0.into())?;
         let grid_size = (queries.len() as u32 + block_size - 1) / block_size;
+        let now = Instant::now();
         unsafe {
             launch!(
                 kernel<<<grid_size, block_size, 0, stream>>>(
@@ -147,16 +154,25 @@ impl Partitions {
             )?;
         }
         stream.synchronize()?;
+        let elapsed = now.elapsed();
+        println!("\trunning kernel:\t{:.2?}", elapsed);
 
         // Copy results from GPU back to CPU.
+        let now = Instant::now();
         dev_result_object_indices.copy_to(&mut result_object_indices)?;
         dev_result_dist2s.copy_to(&mut result_dist2s)?;
+        let elapsed = now.elapsed();
+        println!("\tdevice -> host:\t{:.2?}", elapsed);
 
+        let now = Instant::now();
         let results = result_object_indices
             .into_iter()
             .zip(result_dist2s)
             .map(|(i, d)| if d.is_finite() { Some((i, d)) } else { None })
             .collect_vec();
+        let elapsed = now.elapsed();
+        println!("\tpost process:\t{:.2?}", elapsed);
+
         Ok(results)
     }
 }
