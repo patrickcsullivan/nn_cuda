@@ -7,3 +7,4 @@
 
 pub mod aabb;
 pub mod kernels;
+pub mod partitions;
