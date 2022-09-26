@@ -1,7 +1,14 @@
 use cuda_std::{prelude::*, shared_array, vek::Vec3};
 
-pub const PARTITIONS_COUNT: usize = 400; // 16 bytes per partition
+use crate::partitions::Partitions;
+
+pub const PARTITIONS_COUNT: usize = 400; // 24 bytes per partition
 const OBJECTS_CACHE_SIZE: usize = 256; // 12 bytes per object
+
+extern "C" {
+    #[cfg_attr(target_os = "cuda", nvvm_internal(addrspace(4)))]
+    static PARTITIONS: Partitions;
+}
 
 #[kernel]
 #[allow(improper_ctypes_definitions, clippy::missing_safety_doc)]
@@ -10,14 +17,6 @@ pub unsafe fn partition_search_for_queries(
     sorted_object_xs: &[f32],
     sorted_object_ys: &[f32],
     sorted_object_zs: &[f32],
-    //------
-    partition_size: usize,
-    partition_min_xs: &[f32],
-    partition_min_ys: &[f32],
-    partition_min_zs: &[f32],
-    partition_max_xs: &[f32],
-    partition_max_ys: &[f32],
-    partition_max_zs: &[f32],
     //------
     queries: &[Vec3<f32>],
     //------
@@ -28,30 +27,10 @@ pub unsafe fn partition_search_for_queries(
     let partition_votes = shared_array![usize; PARTITIONS_COUNT];
     let next_partition_idx = shared_array![usize; 1];
 
-    // Allocate shared memory for partition AABBs.
-    let shared_partition_min_xs = shared_array![f32; PARTITIONS_COUNT];
-    let shared_partition_min_ys = shared_array![f32; PARTITIONS_COUNT];
-    let shared_partition_min_zs = shared_array![f32; PARTITIONS_COUNT];
-    let shared_partition_max_xs = shared_array![f32; PARTITIONS_COUNT];
-    let shared_partition_max_ys = shared_array![f32; PARTITIONS_COUNT];
-    let shared_partition_max_zs = shared_array![f32; PARTITIONS_COUNT];
-
     // Allocate shared memory for objects cache.
     let shared_sorted_object_xs = shared_array![f32; OBJECTS_CACHE_SIZE];
     let shared_sorted_object_ys = shared_array![f32; OBJECTS_CACHE_SIZE];
     let shared_sorted_object_zs = shared_array![f32; OBJECTS_CACHE_SIZE];
-
-    // Initialize shared memory for partition AABBs.
-    let mut block_thread_idx = thread::thread_idx_x() as usize;
-    while block_thread_idx < PARTITIONS_COUNT {
-        *shared_partition_min_xs.add(block_thread_idx) = partition_min_xs[block_thread_idx];
-        *shared_partition_min_ys.add(block_thread_idx) = partition_min_ys[block_thread_idx];
-        *shared_partition_min_zs.add(block_thread_idx) = partition_min_zs[block_thread_idx];
-        *shared_partition_max_xs.add(block_thread_idx) = partition_max_xs[block_thread_idx];
-        *shared_partition_max_ys.add(block_thread_idx) = partition_max_ys[block_thread_idx];
-        *shared_partition_max_zs.add(block_thread_idx) = partition_max_zs[block_thread_idx];
-        block_thread_idx += thread::block_dim_x() as usize;
-    }
 
     // Wait until the partition AABBs have been copied into shared memory.
     thread::sync_threads();
@@ -69,13 +48,6 @@ pub unsafe fn partition_search_for_queries(
             shared_sorted_object_xs,
             shared_sorted_object_ys,
             shared_sorted_object_zs,
-            partition_size,
-            shared_partition_min_xs,
-            shared_partition_min_ys,
-            shared_partition_min_zs,
-            shared_partition_max_xs,
-            shared_partition_max_ys,
-            shared_partition_max_zs,
             partition_votes,
             next_partition_idx,
             query,
@@ -98,13 +70,6 @@ unsafe fn partition_search(
     shared_sorted_object_ys: *mut f32,
     shared_sorted_object_zs: *mut f32,
     //------
-    partition_size: usize,
-    partition_min_xs: *mut f32,
-    partition_min_ys: *mut f32,
-    partition_min_zs: *mut f32,
-    partition_max_xs: *mut f32,
-    partition_max_ys: *mut f32,
-    partition_max_zs: *mut f32,
     partition_votes: *mut usize,
     next_partition_idx: *mut usize,
     //------
@@ -140,12 +105,12 @@ unsafe fn partition_search(
             if *partition_votes.add(p_idx) < usize::MAX {
                 let dist2 = dist2_to_aabb(
                     query,
-                    *partition_min_xs.add(p_idx),
-                    *partition_min_ys.add(p_idx),
-                    *partition_min_zs.add(p_idx),
-                    *partition_max_xs.add(p_idx),
-                    *partition_max_ys.add(p_idx),
-                    *partition_max_zs.add(p_idx),
+                    PARTITIONS.min_xs[p_idx],
+                    PARTITIONS.min_ys[p_idx],
+                    PARTITIONS.min_zs[p_idx],
+                    PARTITIONS.max_xs[p_idx],
+                    PARTITIONS.max_ys[p_idx],
+                    PARTITIONS.max_zs[p_idx],
                 );
                 if dist2 < nn_dist2 {
                     // Unsynchronized reads and writes to partition_votes could result in race
@@ -201,9 +166,9 @@ unsafe fn partition_search(
         // Every thread in the block searches the partition with the most votes.
         if partition_idx < PARTITIONS_COUNT {
             // Calculate the partition's start and end indices in the sorted_object arrays.
-            let partition_from = partition_idx * partition_size;
+            let partition_from = partition_idx * PARTITIONS.partition_size;
             let partition_to =
-                ((partition_idx + 1) * partition_size).min(sorted_object_indices.len());
+                ((partition_idx + 1) * PARTITIONS.partition_size).min(sorted_object_indices.len());
 
             // Loop through each point in partition, checking to see if it's the NN.
             for sorted_data_idx in partition_from..partition_to {

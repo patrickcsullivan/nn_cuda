@@ -2,8 +2,8 @@ use crate::morton::map_to_morton_codes_tmp;
 use cuda_std::vek::{Aabb, Vec3};
 use cust::prelude::*;
 use itertools::Itertools;
-use partition_search_gpu::kernels::PARTITIONS_COUNT;
-use std::{error::Error, time::Instant};
+use partition_search_gpu::partitions::{Partitions as DevicePartitions, PARTITIONS_COUNT};
+use std::{error::Error, ffi::CString, time::Instant};
 
 static PTX: &str = include_str!("../../resources/partition_search_gpu.ptx");
 
@@ -14,12 +14,12 @@ pub struct Partitions {
     pub sorted_object_zs: Vec<f32>,
 
     pub partition_size: usize,
-    pub partition_min_xs: Vec<f32>,
-    pub partition_min_ys: Vec<f32>,
-    pub partition_min_zs: Vec<f32>,
-    pub partition_max_xs: Vec<f32>,
-    pub partition_max_ys: Vec<f32>,
-    pub partition_max_zs: Vec<f32>,
+    pub partition_min_xs: [f32; PARTITIONS_COUNT],
+    pub partition_min_ys: [f32; PARTITIONS_COUNT],
+    pub partition_min_zs: [f32; PARTITIONS_COUNT],
+    pub partition_max_xs: [f32; PARTITIONS_COUNT],
+    pub partition_max_ys: [f32; PARTITIONS_COUNT],
+    pub partition_max_zs: [f32; PARTITIONS_COUNT],
 }
 
 impl Partitions {
@@ -48,23 +48,23 @@ impl Partitions {
 
         println!("Partition size: {}", partition_size);
 
-        let mut partition_min_xs = Vec::with_capacity(PARTITIONS_COUNT);
-        let mut partition_min_ys = Vec::with_capacity(PARTITIONS_COUNT);
-        let mut partition_min_zs = Vec::with_capacity(PARTITIONS_COUNT);
-        let mut partition_max_xs = Vec::with_capacity(PARTITIONS_COUNT);
-        let mut partition_max_ys = Vec::with_capacity(PARTITIONS_COUNT);
-        let mut partition_max_zs = Vec::with_capacity(PARTITIONS_COUNT);
+        let mut partition_min_xs = [f32::NAN; PARTITIONS_COUNT];
+        let mut partition_min_ys = [f32::NAN; PARTITIONS_COUNT];
+        let mut partition_min_zs = [f32::NAN; PARTITIONS_COUNT];
+        let mut partition_max_xs = [f32::NAN; PARTITIONS_COUNT];
+        let mut partition_max_ys = [f32::NAN; PARTITIONS_COUNT];
+        let mut partition_max_zs = [f32::NAN; PARTITIONS_COUNT];
 
         for i in 0..PARTITIONS_COUNT {
             let from = i * partition_size;
             let to = ((i + 1) * partition_size).min(sorted_object_vecs.len());
             let aabb = get_aabb(&sorted_object_vecs[from..to]);
-            partition_min_xs.push(aabb.min.x);
-            partition_min_ys.push(aabb.min.y);
-            partition_min_zs.push(aabb.min.z);
-            partition_max_xs.push(aabb.max.x);
-            partition_max_ys.push(aabb.max.y);
-            partition_max_zs.push(aabb.max.z);
+            partition_min_xs[i] = aabb.min.x;
+            partition_min_ys[i] = aabb.min.y;
+            partition_min_zs[i] = aabb.min.z;
+            partition_max_xs[i] = aabb.max.x;
+            partition_max_ys[i] = aabb.max.y;
+            partition_max_zs[i] = aabb.max.z;
         }
 
         Self {
@@ -99,18 +99,26 @@ impl Partitions {
         let elapsed = now.elapsed();
         println!("\tstarting CUDA:\t{:.2?}", elapsed);
 
+        // Allocate constant memory on the GPU.
+        let symbol_name = CString::new("PARTITIONS")?;
+        let mut symbol = module.get_global::<DevicePartitions>(symbol_name.as_c_str())?;
+        let ps = DevicePartitions {
+            partition_size: self.partition_size,
+            min_xs: self.partition_min_xs,
+            min_ys: self.partition_min_ys,
+            min_zs: self.partition_min_zs,
+            max_xs: self.partition_max_xs,
+            max_ys: self.partition_max_ys,
+            max_zs: self.partition_max_zs,
+        };
+        symbol.copy_from(&ps)?;
+
         // Allocate memory on the GPU.
         let now = Instant::now();
         let dev_sorted_object_indices = self.sorted_object_indices.as_slice().as_dbuf()?;
         let dev_sorted_object_xs = self.sorted_object_xs.as_slice().as_dbuf()?;
         let dev_sorted_object_ys = self.sorted_object_ys.as_slice().as_dbuf()?;
         let dev_sorted_object_zs = self.sorted_object_zs.as_slice().as_dbuf()?;
-        let dev_partition_min_xs = self.partition_min_xs.as_slice().as_dbuf()?;
-        let dev_partition_min_ys = self.partition_min_ys.as_slice().as_dbuf()?;
-        let dev_partition_min_zs = self.partition_min_zs.as_slice().as_dbuf()?;
-        let dev_partition_max_xs = self.partition_max_xs.as_slice().as_dbuf()?;
-        let dev_partition_max_ys = self.partition_max_ys.as_slice().as_dbuf()?;
-        let dev_partition_max_zs = self.partition_max_zs.as_slice().as_dbuf()?;
         let dev_queries = queries.as_dbuf()?;
         let dev_result_object_indices = result_object_indices.as_slice().as_dbuf()?;
         let dev_result_dist2s = result_dist2s.as_slice().as_dbuf()?;
@@ -131,20 +139,6 @@ impl Partitions {
                     dev_sorted_object_ys.len(),
                     dev_sorted_object_zs.as_device_ptr(),
                     dev_sorted_object_zs.len(),
-                    //-----
-                    self.partition_size,
-                    dev_partition_min_xs.as_device_ptr(),
-                    dev_partition_min_xs.len(),
-                    dev_partition_min_ys.as_device_ptr(),
-                    dev_partition_min_ys.len(),
-                    dev_partition_min_zs.as_device_ptr(),
-                    dev_partition_min_zs.len(),
-                    dev_partition_max_xs.as_device_ptr(),
-                    dev_partition_max_xs.len(),
-                    dev_partition_max_ys.as_device_ptr(),
-                    dev_partition_max_ys.len(),
-                    dev_partition_max_zs.as_device_ptr(),
-                    dev_partition_max_zs.len(),
                     //-----
                     dev_queries.as_device_ptr(),
                     dev_queries.len(),
