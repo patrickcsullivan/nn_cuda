@@ -133,7 +133,10 @@ unsafe fn partition_search(
         // Wait until all threads are ready to start voting.
         thread::sync_threads();
 
-        // Find partitions that could contain the NN and vote on them.
+        let mut vote_partition_idx = 0;
+        let mut vote_partition_dist2 = nn_dist2;
+
+        // Find partitions that is closes to the query.
         for p_idx in 0..PARTITIONS_COUNT {
             // When partition_votes[p_idx] is usize::MAX, the partition has already been
             // searched, so we don't want to check it again.
@@ -147,13 +150,19 @@ unsafe fn partition_search(
                     *partition_max_ys.add(p_idx),
                     *partition_max_zs.add(p_idx),
                 );
-                if dist2 < nn_dist2 {
-                    // Unsynchronized reads and writes to partition_votes could result in race
-                    // conditions and inaccurate vote counts, but this is ok as since the vote
-                    // counts don't need to be exact.
-                    *partition_votes.add(p_idx) = *partition_votes.add(p_idx) + 1;
+                if dist2 < vote_partition_dist2 {
+                    vote_partition_dist2 = dist2;
+                    vote_partition_idx = p_idx;
                 }
             }
+        }
+
+        // Vote on the next partition to search.
+        if vote_partition_dist2 < nn_dist2 {
+            // Unsynchronized reads and writes to partition_votes could result in race
+            // conditions and inaccurate vote counts, but this is ok as since the vote
+            // counts don't need to be exact.
+            *partition_votes.add(vote_partition_idx) = *partition_votes.add(vote_partition_idx) + 1;
         }
 
         // Wait until all threads have finished voting on the next partition to search.
