@@ -158,7 +158,7 @@ unsafe fn partition_search(
             *partition_votes.add(max_votes_idx) = usize::MAX;
 
             // Record the index of the winning partition to shared memory. If no votes were
-            // case, use usize::MAX to indicate that there is no next partition to search.
+            // cast, use usize::MAX to indicate that there is no next partition to search.
             *next_partition_idx = if max_votes_count > 0 {
                 max_votes_idx
             } else {
@@ -174,12 +174,12 @@ unsafe fn partition_search(
         // Every thread in the block searches the partition with the most votes.
         if partition_idx < PARTITIONS.count {
             // Calculate the partition's start and end indices in the sorted_object arrays.
-            let partition_from = PARTITIONS.starts[partition_idx];
-            let partition_to = PARTITIONS.ends[partition_idx];
+            let partition_start = PARTITIONS.starts[partition_idx];
+            let partition_end = PARTITIONS.ends[partition_idx];
 
             // Loop through each point in partition, checking to see if it's the NN.
-            for sorted_data_idx in partition_from..partition_to {
-                let cache_idx = (sorted_data_idx - partition_from) % OBJECTS_CACHE_SIZE;
+            for sorted_data_idx in partition_start..=partition_end {
+                let cache_idx = (sorted_data_idx - partition_start) % OBJECTS_CACHE_SIZE;
 
                 // If we're trying to examine the first point in the cache, then scan forward
                 // and load the cache.
@@ -187,7 +187,7 @@ unsafe fn partition_search(
                     thread::sync_threads();
                     let mut look_ahead_idx = thread::thread_idx_x() as usize;
                     while look_ahead_idx < OBJECTS_CACHE_SIZE
-                        && sorted_data_idx + look_ahead_idx < partition_to
+                        && sorted_data_idx + look_ahead_idx <= partition_end
                     {
                         *shared_sorted_object_xs.add(look_ahead_idx) =
                             sorted_object_xs[sorted_data_idx + look_ahead_idx];
