@@ -2,27 +2,20 @@ use crate::morton::map_to_morton_codes_tmp;
 use cuda_std::vek::{Aabb, Vec3};
 use cust::prelude::*;
 use itertools::Itertools;
-use partition_search_gpu::partitions::{Partitions as DevicePartitions, PARTITIONS_COUNT};
+use partition_search_gpu::partitions::{Partitions, PARTITIONS_COUNT};
 use std::{error::Error, ffi::CString, time::Instant};
 
 static PTX: &str = include_str!("../../resources/partition_search_gpu.ptx");
 
-pub struct Partitions {
+pub struct PartitionSearch {
     pub sorted_object_indices: Vec<usize>,
     pub sorted_object_xs: Vec<f32>,
     pub sorted_object_ys: Vec<f32>,
     pub sorted_object_zs: Vec<f32>,
-
-    pub partition_size: usize,
-    pub partition_min_xs: [f32; PARTITIONS_COUNT],
-    pub partition_min_ys: [f32; PARTITIONS_COUNT],
-    pub partition_min_zs: [f32; PARTITIONS_COUNT],
-    pub partition_max_xs: [f32; PARTITIONS_COUNT],
-    pub partition_max_ys: [f32; PARTITIONS_COUNT],
-    pub partition_max_zs: [f32; PARTITIONS_COUNT],
+    pub partitions: Partitions,
 }
 
-impl Partitions {
+impl PartitionSearch {
     pub fn new<T>(objects: &[T], aabb: &Aabb<f32>) -> Self
     where
         T: HasVec3,
@@ -72,14 +65,15 @@ impl Partitions {
             sorted_object_xs,
             sorted_object_ys,
             sorted_object_zs,
-
-            partition_size,
-            partition_min_xs,
-            partition_min_ys,
-            partition_min_zs,
-            partition_max_xs,
-            partition_max_ys,
-            partition_max_zs,
+            partitions: Partitions {
+                partition_size,
+                min_xs: partition_min_xs,
+                min_ys: partition_min_ys,
+                min_zs: partition_min_zs,
+                max_xs: partition_max_xs,
+                max_ys: partition_max_ys,
+                max_zs: partition_max_zs,
+            },
         }
     }
 
@@ -101,17 +95,8 @@ impl Partitions {
 
         // Allocate constant memory on the GPU.
         let symbol_name = CString::new("PARTITIONS")?;
-        let mut symbol = module.get_global::<DevicePartitions>(symbol_name.as_c_str())?;
-        let ps = DevicePartitions {
-            partition_size: self.partition_size,
-            min_xs: self.partition_min_xs,
-            min_ys: self.partition_min_ys,
-            min_zs: self.partition_min_zs,
-            max_xs: self.partition_max_xs,
-            max_ys: self.partition_max_ys,
-            max_zs: self.partition_max_zs,
-        };
-        symbol.copy_from(&ps)?;
+        let mut symbol = module.get_global::<Partitions>(symbol_name.as_c_str())?;
+        symbol.copy_from(&self.partitions)?;
 
         // Allocate memory on the GPU.
         let now = Instant::now();

@@ -1,8 +1,7 @@
 use cuda_std::{prelude::*, shared_array, vek::Vec3};
 
-use crate::partitions::Partitions;
+use crate::partitions::{Partitions, PARTITIONS_COUNT};
 
-pub const PARTITIONS_COUNT: usize = 400; // 24 bytes per partition
 const OBJECTS_CACHE_SIZE: usize = 256; // 12 bytes per object
 
 extern "C" {

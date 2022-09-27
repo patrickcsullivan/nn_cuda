@@ -4,7 +4,7 @@ use bvh_cpu::{bvh::Bvh, morton::map_to_morton_codes_tmp};
 use cuda_std::vek::{Aabb, Vec3};
 use itertools::Itertools;
 use kiddo::KdTree;
-use partition_search_cpu::partition::{HasVec3, Partitions};
+use partition_search_cpu::partition::{HasVec3, PartitionSearch};
 use rayon::prelude::*;
 use rstar::{PointDistance, RTree, RTreeObject};
 use std::{env, error::Error, time::Instant};
@@ -99,7 +99,7 @@ fn benchmarks(
 
     // Test partition search CUDA.
     let partition_objs = objects.iter().map(|&v| PartitionObj(v)).collect_vec();
-    let partitions = Partitions::new(&partition_objs, aabb);
+    let partitions = PartitionSearch::new(&partition_objs, aabb);
     let now = Instant::now();
     let partition_results = partitions.find_nns(&sorted_queries)?;
     let elapsed = now.elapsed();
