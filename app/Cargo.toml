@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+bit_partition_search_cpu =  { path = "../bit_partition_search_cpu" }
 bvh_cpu =  { path = "../bvh_cpu" }
 cuda_std = "0.2.2"
 itertools = "0.10.3"

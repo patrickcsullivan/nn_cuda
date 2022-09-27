@@ -1,10 +1,11 @@
 mod dragon;
 
+use bit_partition_search_cpu::partition::BitPartitionSearch;
 use bvh_cpu::{bvh::Bvh, morton::map_to_morton_codes_tmp};
 use cuda_std::vek::{Aabb, Vec3};
 use itertools::Itertools;
 use kiddo::KdTree;
-use partition_search_cpu::partition::{HasVec3, PartitionSearch};
+use partition_search_cpu::partition::PartitionSearch;
 use rayon::prelude::*;
 use rstar::{PointDistance, RTree, RTreeObject};
 use std::{env, error::Error, time::Instant};
@@ -16,17 +17,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let path = args.get(1).unwrap_or(&default_path);
     dragon_test(path)?;
     Ok(())
-}
-
-fn simple_test() -> Result<(), Box<dyn Error>> {
-    let objects = vec![Vec3::new(-1.0, -1.0, -1.0), Vec3::new(10.0, 10.0, 10.0)];
-    let aabb = Aabb::new_empty(objects[0]).union(Aabb::new_empty(objects[objects.len() - 1]));
-
-    let queries = (0..(3 * 1024))
-        .map(|i| Vec3::new(i as f32, i as f32, i as f32))
-        .collect_vec();
-
-    benchmarks(&objects, &aabb, &queries)
 }
 
 fn dragon_test(path: &str) -> Result<(), Box<dyn Error>> {
@@ -97,13 +87,21 @@ fn benchmarks(
     let elapsed = now.elapsed();
     println!("BVH CUDA:\t\t\t{:.2?}", elapsed);
 
-    // Test partition search CUDA.
+    // Test fixed width partition search CUDA.
     let partition_objs = objects.iter().map(|&v| PartitionObj(v)).collect_vec();
     let partitions = PartitionSearch::new(&partition_objs, aabb);
     let now = Instant::now();
     let partition_results = partitions.find_nns(&sorted_queries)?;
     let elapsed = now.elapsed();
-    println!("Partition Search CUDA:\t\t{:.2?}", elapsed);
+    println!("Fixed Partition Search CUDA:\t{:.2?}", elapsed);
+
+    // Test bit partition search CUDA.
+    let bit_partition_objs = objects.iter().map(|&v| PartitionObj(v)).collect_vec();
+    let partitions = BitPartitionSearch::new(&bit_partition_objs, aabb);
+    let now = Instant::now();
+    let bit_partition_results = partitions.find_nns(&sorted_queries)?;
+    let elapsed = now.elapsed();
+    println!("Bit Partition Search CUDA:\t{:.2?}", elapsed);
 
     // // Test BVH CUDA with sorted queries.
     // let now = Instant::now();
@@ -189,7 +187,7 @@ fn benchmarks(
         .filter(|&i| partition_results[i].map(|r| r.0) != bf_results[i].map(|r| r.0))
         .collect_vec();
     println!(
-        "Partitions CUDA and Brute Force CUDA find different NNs on {} queries",
+        "Fixed Partitions CUDA and Brute Force CUDA find different NNs on {} queries",
         fails.len()
     );
 
@@ -197,7 +195,7 @@ fn benchmarks(
         .filter(|&i| (partition_results[i].map(|r| r.1) != bf_results[i].map(|r| r.1)))
         .collect_vec();
     println!(
-        "Partitions CUDA and Brute Force CUDA find different NN dists on {} queries",
+        "Fixed Partitions CUDA and Brute Force CUDA find different NN dists on {} queries",
         fails.len()
     );
 
@@ -206,9 +204,32 @@ fn benchmarks(
         .filter(|r| r.is_none())
         .collect_vec();
     println!(
-        "Partitions CUDA does not find NN for {} queries",
+        "Fixed Partitions CUDA does not find NN for {} queries",
         no_nn.len()
     );
+
+    let fails = (0..queries.len())
+        .filter(|&i| bit_partition_results[i].map(|r| r.0) != bf_results[i].map(|r| r.0))
+        .collect_vec();
+    println!(
+        "Bit Partitions CUDA and Brute Force CUDA find different NNs on {} queries",
+        fails.len()
+    );
+
+    let fails = (0..queries.len())
+        .map(|i| {
+            ((
+                bit_partition_results[i].map(|r| r.1),
+                bf_results[i].map(|r| r.1),
+            ))
+        })
+        .filter(|(r1, r2)| r1 != r2)
+        .collect_vec();
+    println!(
+        "Bit Partitions CUDA and Brute Force CUDA find different NN dists on {} queries",
+        fails.len()
+    );
+    // println!("Different NN dists: {:?}", fails);
 
     // let fails = (0..queries.len())
     //     .filter(|&i| bvh_results[i].unwrap().0 !=
@@ -270,7 +291,13 @@ fn get_aabb(vs: &[Vec3<f32>]) -> Aabb<f32> {
 
 struct PartitionObj(Vec3<f32>);
 
-impl HasVec3 for PartitionObj {
+impl partition_search_cpu::partition::HasVec3 for PartitionObj {
+    fn vec3(&self) -> Vec3<f32> {
+        self.0
+    }
+}
+
+impl bit_partition_search_cpu::partition::HasVec3 for PartitionObj {
     fn vec3(&self) -> Vec3<f32> {
         self.0
     }

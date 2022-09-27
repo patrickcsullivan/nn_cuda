@@ -1,6 +1,8 @@
 [workspace]
 members = [
   "app",
+  "bit_partition_search_cpu",
+  "bit_partition_search_gpu",
   "bvh_cpu",
   "bvh_gpu",
   "partition_search_cpu",
