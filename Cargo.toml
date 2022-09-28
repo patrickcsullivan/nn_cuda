@@ -1,8 +1,8 @@
 [workspace]
 members = [
   "app",
-  "bit_partition_search_cpu",
-  "bit_partition_search_gpu",
+  "nn_cuda",
+  "nn_cuda_gpu",
 ]
 
 [profile.dev.package.rustc_codegen_nvvm]

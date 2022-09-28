@@ -1,10 +1,10 @@
 mod dragon;
 
-use bit_partition_search_cpu::morton::map_to_morton_codes_tmp;
-use bit_partition_search_cpu::partition::BitPartitionSearch;
 use cuda_std::vek::{Aabb, Vec3};
 use itertools::Itertools;
 use kiddo::KdTree;
+use nn_cuda::morton::map_to_morton_codes_tmp;
+use nn_cuda::partition::BitPartitionSearch;
 use rayon::prelude::*;
 use rstar::{PointDistance, RTree, RTreeObject};
 use std::{env, error::Error, time::Instant};
@@ -151,7 +151,7 @@ fn get_aabb(vs: &[Vec3<f32>]) -> Aabb<f32> {
 
 struct PartitionObj(Vec3<f32>);
 
-impl bit_partition_search_cpu::partition::HasVec3 for PartitionObj {
+impl nn_cuda::partition::HasVec3 for PartitionObj {
     fn vec3(&self) -> Vec3<f32> {
         self.0
     }

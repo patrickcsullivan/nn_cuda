@@ -1,13 +1,11 @@
 use crate::morton::map_to_morton_codes_tmp;
-use bit_partition_search_gpu::partitions::{
-    Partitions, MAX_PARTITIONS_COUNT, PARTITION_BITS_COUNT,
-};
 use cuda_std::vek::{Aabb, Vec3};
 use cust::prelude::*;
 use itertools::Itertools;
+use nn_cuda_gpu::partitions::{Partitions, MAX_PARTITIONS_COUNT, PARTITION_BITS_COUNT};
 use std::{error::Error, ffi::CString, time::Instant};
 
-static PTX: &str = include_str!("../../resources/bit_partition_search_gpu.ptx");
+static PTX: &str = include_str!("../../resources/nn_cuda_gpu.ptx");
 
 pub struct BitPartitionSearch {
     pub sorted_object_indices: Vec<usize>,

@@ -1,12 +1,12 @@
 [package]
-name = "bit_partition_search_cpu"
+name = "nn_cuda"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 cuda_std = "0.2.2"
 cust = "0.3.2"
-bit_partition_search_gpu = { path = "../bit_partition_search_gpu" }
+nn_cuda_gpu = { path = "../nn_cuda_gpu" }
 itertools = "0.10.3"
 
 [build-dependencies]

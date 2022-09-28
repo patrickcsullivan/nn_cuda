@@ -1,5 +1,5 @@
 [package]
-name = "bit_partition_search_gpu"
+name = "nn_cuda_gpu"
 version = "0.1.0"
 edition = "2021"
 
