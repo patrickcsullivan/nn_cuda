@@ -3,7 +3,6 @@ mod ply;
 use cuda_std::vek::{Aabb, Vec3};
 use cust::stream::{Stream, StreamFlags};
 use itertools::Itertools;
-use nn_cuda::morton::map_to_morton_codes_tmp;
 use nn_cuda::partition::BitPartitionSearch;
 use rayon::prelude::*;
 use rstar::{RTree, RTreeObject};
@@ -11,7 +10,7 @@ use std::{env, error::Error, time::Instant};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
-    let default_path = "./app/data/ornate_wooden_door.ply".to_string();
+    let default_path = "./app/data/dragon_vrip.ply".to_string();
     let path = args.get(1).unwrap_or(&default_path);
     ply_test(path)?;
     Ok(())
@@ -50,23 +49,13 @@ fn benchmarks(
     println!("{} objects", objects.len());
     println!("{} queries", queries.len());
 
-    // Radix sort queries.
-    let queries_aabb = get_aabb(queries);
-    let morton_codes = map_to_morton_codes_tmp(queries, &queries_aabb);
-    let mut sorted_query_indices = (0..queries.len()).collect_vec();
-    sorted_query_indices.sort_by_key(|&i| morton_codes[i]);
-    let sorted_queries = sorted_query_indices
-        .into_iter()
-        .map(|i| queries[i])
-        .collect_vec();
-
     // Test bit partition search CUDA.
     let _ctx = cust::quick_init()?;
     let bit_partition_objs = objects.iter().map(|&v| PartitionObj(v)).collect_vec();
     let partitions = BitPartitionSearch::new(&bit_partition_objs, aabb)?;
     let now = Instant::now();
     let stream = Stream::new(StreamFlags::NON_BLOCKING, None)?;
-    let bit_partition_results = partitions.find_nns(stream, &sorted_queries)?;
+    let bit_partition_results = partitions.find_nns(stream, &queries, None)?;
     let elapsed = now.elapsed();
     println!("Bit Partition Search CUDA:\t{:.2?}", elapsed);
 
@@ -79,7 +68,7 @@ fn benchmarks(
             point: [o.x, o.y, o.z],
         })
         .collect_vec();
-    let rtree_queries = sorted_queries.iter().map(|q| [q.x, q.y, q.z]).collect_vec();
+    let rtree_queries = queries.iter().map(|q| [q.x, q.y, q.z]).collect_vec();
     let rtree = RTree::bulk_load(rtree_objects);
 
     // Test with RTree multi-threaded.
@@ -93,7 +82,7 @@ fn benchmarks(
 
     // -------------------------------------------------------------------------
 
-    let fails = (0..sorted_queries.len())
+    let fails = (0..queries.len())
         .filter(|&i| bit_partition_results[i].unwrap().0 != rtree_results_mt[i].unwrap().index)
         .collect_vec();
     println!(
@@ -101,7 +90,7 @@ fn benchmarks(
         fails.len()
     );
 
-    let fails = sorted_queries
+    let fails = queries
         .iter()
         .enumerate()
         .filter(|&(i, q)| {

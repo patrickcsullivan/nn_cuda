@@ -1,16 +1,7 @@
 use cuda_std::vek::{Aabb, Vec3};
-use nn_cuda_gpu::aabb::DeviceCopyAabb;
-
-pub fn map_to_morton_codes_tmp(points: &[Vec3<f32>], aabb: &Aabb<f32>) -> Vec<u32> {
-    let aabb = DeviceCopyAabb {
-        min: aabb.min,
-        max: aabb.max,
-    };
-    map_to_morton_codes(points, &aabb)
-}
 
 /// Maps each 3-dimensional point to a Morton code.
-pub fn map_to_morton_codes(points: &[Vec3<f32>], aabb: &DeviceCopyAabb<f32>) -> Vec<u32> {
+pub fn map_to_morton_codes(points: &[Vec3<f32>], aabb: &Aabb<f32>) -> Vec<u32> {
     let scale = aabb.size().recip();
     points
         .iter()

@@ -1,4 +1,4 @@
-use crate::morton::map_to_morton_codes_tmp;
+use crate::morton::map_to_morton_codes;
 use cuda_std::vek::{Aabb, Vec3};
 use cust::prelude::*;
 use itertools::Itertools;
@@ -35,7 +35,7 @@ impl BitPartitionSearch {
     {
         // Sort the objects along the Z-curve.
         let vecs = objects.iter().map(|o| o.vec3()).collect_vec();
-        let morton_codes = map_to_morton_codes_tmp(&vecs, &aabb);
+        let morton_codes = map_to_morton_codes(&vecs, &aabb);
         let mut sorted_object_indices = (0..objects.len()).collect_vec();
         sorted_object_indices.sort_by_key(|&i| morton_codes[i]);
 
@@ -132,22 +132,33 @@ impl BitPartitionSearch {
         &self,
         stream: Stream,
         queries: &[Vec3<f32>],
+        queries_aabb: Option<Aabb<f32>>,
     ) -> Result<Vec<Option<(usize, f32)>>, Box<dyn Error>> {
-        // Allocate memory on the CPU.
+        // Radix sort queries.
+        let now = Instant::now();
+        let queries_aabb = queries_aabb.unwrap_or_else(|| get_aabb(queries));
+        let morton_codes = map_to_morton_codes(queries, &queries_aabb);
+        let mut sorted_query_indices = (0..queries.len()).collect_vec();
+        sorted_query_indices.sort_by_key(|&i| morton_codes[i]);
+        let sorted_queries = sorted_query_indices
+            .iter()
+            .map(|&i| queries[i])
+            .collect_vec();
+        let elapsed = now.elapsed();
+        println!("\tradix sorting queries:\t{:.2?}", elapsed);
+
+        // Allocate memory on the CPU for results.
         let mut result_object_indices = vec![0usize; queries.len()];
         let mut result_dist2s = vec![f32::INFINITY; queries.len()];
 
-        // let _ctx = cust::quick_init()?;
-        // let stream = Stream::new(StreamFlags::NON_BLOCKING, None)?;
-
         // Allocate global memory for queries and results on the GPU.
-        let dev_queries = queries.as_dbuf()?;
+        let dev_sorted_queries = sorted_queries.as_slice().as_dbuf()?;
         let dev_result_object_indices = result_object_indices.as_slice().as_dbuf()?;
         let dev_result_dist2s = result_dist2s.as_slice().as_dbuf()?;
 
         let kernel = self.module.get_function("partition_search_for_queries")?;
         let (_, block_size) = kernel.suggested_launch_configuration(0, 0.into())?;
-        let grid_size = (queries.len() as u32 + block_size - 1) / block_size;
+        let grid_size = (sorted_queries.len() as u32 + block_size - 1) / block_size;
         let now = Instant::now();
         unsafe {
             launch!(
@@ -178,8 +189,8 @@ impl BitPartitionSearch {
                     self.dev_partition_max_zs.as_device_ptr(),
                     self.dev_partition_max_zs.len(),
                     //-----
-                    dev_queries.as_device_ptr(),
-                    dev_queries.len(),
+                    dev_sorted_queries.as_device_ptr(),
+                    dev_sorted_queries.len(),
                     dev_result_object_indices.as_device_ptr(),
                     dev_result_dist2s.as_device_ptr(),
                 )
@@ -196,16 +207,24 @@ impl BitPartitionSearch {
         let elapsed = now.elapsed();
         println!("\tdevice -> host:\t{:.2?}", elapsed);
 
+        // Results are generated in the same order as the sorted queries. We should
+        // unsort them so that they are in the same order as the original
+        // queries.
         let now = Instant::now();
-        let results = result_object_indices
+        let sorted_results = result_object_indices
             .into_iter()
             .zip(result_dist2s)
             .map(|(i, d)| if d.is_finite() { Some((i, d)) } else { None })
             .collect_vec();
+        let mut unsorted_results = vec![None; sorted_results.len()];
+        sorted_query_indices
+            .iter()
+            .zip(sorted_results)
+            .for_each(|(&i, r)| unsorted_results[i] = r);
         let elapsed = now.elapsed();
         println!("\tpost process:\t{:.2?}", elapsed);
 
-        Ok(results)
+        Ok(unsorted_results)
     }
 }
 
@@ -215,10 +234,6 @@ fn get_aabb(vecs: &[Vec3<f32>]) -> Aabb<f32> {
         aabb.expand_to_contain_point(*v)
     }
     aabb
-}
-
-fn div_ceil(numerator: usize, denominator: usize) -> usize {
-    (numerator + denominator - 1) / denominator
 }
 
 fn partition_by_bit_prefix(bits_count: u32, sorted_morton_codes: &[u32]) -> Vec<usize> {
