@@ -2,8 +2,8 @@ use crate::morton::map_to_morton_codes_tmp;
 use cuda_std::vek::{Aabb, Vec3};
 use cust::prelude::*;
 use itertools::Itertools;
-use nn_cuda_gpu::partitions::{Partitions, MAX_PARTITIONS_COUNT, PARTITION_BITS_COUNT};
-use std::{error::Error, ffi::CString, time::Instant};
+use nn_cuda_gpu::partitions::PARTITION_BITS_COUNT;
+use std::{error::Error, time::Instant};
 
 static PTX: &str = include_str!("../../resources/nn_cuda_gpu.ptx");
 
@@ -18,6 +18,14 @@ pub struct BitPartitionSearch {
     pub dev_sorted_object_xs: DeviceBuffer<f32>,
     pub dev_sorted_object_ys: DeviceBuffer<f32>,
     pub dev_sorted_object_zs: DeviceBuffer<f32>,
+    pub dev_partition_starts: DeviceBuffer<usize>,
+    pub dev_partition_ends: DeviceBuffer<usize>,
+    pub dev_partition_min_xs: DeviceBuffer<f32>,
+    pub dev_partition_min_ys: DeviceBuffer<f32>,
+    pub dev_partition_min_zs: DeviceBuffer<f32>,
+    pub dev_partition_max_xs: DeviceBuffer<f32>,
+    pub dev_partition_max_ys: DeviceBuffer<f32>,
+    pub dev_partition_max_zs: DeviceBuffer<f32>,
 }
 
 impl BitPartitionSearch {
@@ -60,14 +68,14 @@ impl BitPartitionSearch {
             .collect_vec();
 
         // Calculate the AABBs for each partition.
-        let mut partition_starts = [usize::MAX; MAX_PARTITIONS_COUNT];
-        let mut partition_ends = [usize::MAX; MAX_PARTITIONS_COUNT];
-        let mut partition_min_xs = [f32::NAN; MAX_PARTITIONS_COUNT];
-        let mut partition_min_ys = [f32::NAN; MAX_PARTITIONS_COUNT];
-        let mut partition_min_zs = [f32::NAN; MAX_PARTITIONS_COUNT];
-        let mut partition_max_xs = [f32::NAN; MAX_PARTITIONS_COUNT];
-        let mut partition_max_ys = [f32::NAN; MAX_PARTITIONS_COUNT];
-        let mut partition_max_zs = [f32::NAN; MAX_PARTITIONS_COUNT];
+        let mut partition_starts = vec![usize::MAX; partition_count];
+        let mut partition_ends = vec![usize::MAX; partition_count];
+        let mut partition_min_xs = vec![f32::NAN; partition_count];
+        let mut partition_min_ys = vec![f32::NAN; partition_count];
+        let mut partition_min_zs = vec![f32::NAN; partition_count];
+        let mut partition_max_xs = vec![f32::NAN; partition_count];
+        let mut partition_max_ys = vec![f32::NAN; partition_count];
+        let mut partition_max_zs = vec![f32::NAN; partition_count];
         for i in 0..partition_count {
             partition_starts[i] = starts[i];
             partition_ends[i] = ends[i];
@@ -79,32 +87,25 @@ impl BitPartitionSearch {
             partition_max_ys[i] = aabb.max.y;
             partition_max_zs[i] = aabb.max.z;
         }
-        let partitions = Partitions {
-            count: partition_count,
-            starts: partition_starts,
-            ends: partition_ends,
-            min_xs: partition_min_xs,
-            min_ys: partition_min_ys,
-            min_zs: partition_min_zs,
-            max_xs: partition_max_xs,
-            max_ys: partition_max_ys,
-            max_zs: partition_max_zs,
-        };
 
-        // Load the CUDA module and constant memory symbol.
+        // Load the CUDA module.
         let module = Module::from_ptx(PTX, &[])?;
-        let partitions_symbol_name = CString::new("PARTITIONS")?;
-        let mut partitions_symbol =
-            module.get_global::<Partitions>(partitions_symbol_name.as_c_str())?;
-
-        // Load the partitions into device constant memory.
-        partitions_symbol.copy_from(&partitions)?;
 
         // Load the sorted object indices and positions into device main memory.
         let dev_sorted_object_indices = sorted_object_indices.as_slice().as_dbuf()?;
         let dev_sorted_object_xs = sorted_object_xs.as_slice().as_dbuf()?;
         let dev_sorted_object_ys = sorted_object_ys.as_slice().as_dbuf()?;
         let dev_sorted_object_zs = sorted_object_zs.as_slice().as_dbuf()?;
+
+        // Load the partitions into device main memory.
+        let dev_partition_starts = partition_starts.as_slice().as_dbuf()?;
+        let dev_partition_ends = partition_ends.as_slice().as_dbuf()?;
+        let dev_partition_min_xs = partition_min_xs.as_slice().as_dbuf()?;
+        let dev_partition_min_ys = partition_min_ys.as_slice().as_dbuf()?;
+        let dev_partition_min_zs = partition_min_zs.as_slice().as_dbuf()?;
+        let dev_partition_max_xs = partition_max_xs.as_slice().as_dbuf()?;
+        let dev_partition_max_ys = partition_max_ys.as_slice().as_dbuf()?;
+        let dev_partition_max_zs = partition_max_zs.as_slice().as_dbuf()?;
 
         Ok(Self {
             sorted_object_indices,
@@ -116,6 +117,14 @@ impl BitPartitionSearch {
             dev_sorted_object_xs,
             dev_sorted_object_ys,
             dev_sorted_object_zs,
+            dev_partition_starts,
+            dev_partition_ends,
+            dev_partition_min_xs,
+            dev_partition_min_ys,
+            dev_partition_min_zs,
+            dev_partition_max_xs,
+            dev_partition_max_ys,
+            dev_partition_max_zs,
         })
     }
 
@@ -151,6 +160,23 @@ impl BitPartitionSearch {
                     self.dev_sorted_object_ys.len(),
                     self.dev_sorted_object_zs.as_device_ptr(),
                     self.dev_sorted_object_zs.len(),
+                    //-----
+                    self.dev_partition_starts.as_device_ptr(),
+                    self.dev_partition_starts.len(),
+                    self.dev_partition_ends.as_device_ptr(),
+                    self.dev_partition_ends.len(),
+                    self.dev_partition_min_xs.as_device_ptr(),
+                    self.dev_partition_min_xs.len(),
+                    self.dev_partition_min_ys.as_device_ptr(),
+                    self.dev_partition_min_ys.len(),
+                    self.dev_partition_min_zs.as_device_ptr(),
+                    self.dev_partition_min_zs.len(),
+                    self.dev_partition_max_xs.as_device_ptr(),
+                    self.dev_partition_max_xs.len(),
+                    self.dev_partition_max_ys.as_device_ptr(),
+                    self.dev_partition_max_ys.len(),
+                    self.dev_partition_max_zs.as_device_ptr(),
+                    self.dev_partition_max_zs.len(),
                     //-----
                     dev_queries.as_device_ptr(),
                     dev_queries.len(),

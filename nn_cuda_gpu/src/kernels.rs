@@ -1,13 +1,8 @@
 use cuda_std::{prelude::*, shared_array, vek::Vec3};
 
-use crate::partitions::{Partitions, MAX_PARTITIONS_COUNT};
+use crate::partitions::MAX_PARTITIONS_COUNT;
 
 const OBJECTS_CACHE_SIZE: usize = 256; // 12 bytes per object
-
-extern "C" {
-    #[cfg_attr(target_os = "cuda", nvvm_internal(addrspace(4)))]
-    static PARTITIONS: Partitions;
-}
 
 #[kernel]
 #[allow(improper_ctypes_definitions, clippy::missing_safety_doc)]
@@ -16,6 +11,15 @@ pub unsafe fn partition_search_for_queries(
     sorted_object_xs: &[f32],
     sorted_object_ys: &[f32],
     sorted_object_zs: &[f32],
+    //------
+    partition_starts: &[usize],
+    partition_ends: &[usize],
+    partition_min_xs: &[f32],
+    partition_min_ys: &[f32],
+    partition_min_zs: &[f32],
+    partition_max_xs: &[f32],
+    partition_max_ys: &[f32],
+    partition_max_zs: &[f32],
     //------
     queries: &[Vec3<f32>],
     //------
@@ -47,6 +51,14 @@ pub unsafe fn partition_search_for_queries(
             shared_sorted_object_xs,
             shared_sorted_object_ys,
             shared_sorted_object_zs,
+            partition_starts,
+            partition_ends,
+            partition_min_xs,
+            partition_min_ys,
+            partition_min_zs,
+            partition_max_xs,
+            partition_max_ys,
+            partition_max_zs,
             partition_votes,
             next_partition_idx,
             query,
@@ -69,6 +81,15 @@ unsafe fn partition_search(
     shared_sorted_object_ys: *mut f32,
     shared_sorted_object_zs: *mut f32,
     //------
+    partition_starts: &[usize],
+    partition_ends: &[usize],
+    partition_min_xs: &[f32],
+    partition_min_ys: &[f32],
+    partition_min_zs: &[f32],
+    partition_max_xs: &[f32],
+    partition_max_ys: &[f32],
+    partition_max_zs: &[f32],
+    //------
     partition_votes: *mut usize,
     next_partition_idx: *mut usize,
     //------
@@ -76,13 +97,14 @@ unsafe fn partition_search(
 ) -> (usize, f32) {
     // Wait until all threads are ready to reset partition votes.
     thread::sync_threads();
+    let partition_count = partition_starts.len();
 
     // Initialize shared memory for partition voting.
     let mut block_thread_idx = thread::thread_idx_x() as usize;
     if block_thread_idx == 0 {
         *next_partition_idx = 0;
     }
-    while block_thread_idx < PARTITIONS.count {
+    while block_thread_idx < partition_count {
         *partition_votes.add(block_thread_idx) = 0;
         block_thread_idx += thread::block_dim_x() as usize;
     }
@@ -93,7 +115,7 @@ unsafe fn partition_search(
     let mut nn_object_idx = usize::MAX;
     let mut nn_dist2 = f32::INFINITY;
 
-    while *next_partition_idx < PARTITIONS.count {
+    while *next_partition_idx < partition_count {
         // Wait until all threads are ready to start voting.
         thread::sync_threads();
 
@@ -101,18 +123,18 @@ unsafe fn partition_search(
         let mut vote_partition_dist2 = nn_dist2;
 
         // Find partitions that is closes to the query.
-        for p_idx in 0..PARTITIONS.count {
+        for p_idx in 0..partition_count {
             // When partition_votes[p_idx] is usize::MAX, the partition has already been
             // searched, so we don't want to check it again.
             if *partition_votes.add(p_idx) < usize::MAX {
                 let dist2 = dist2_to_aabb(
                     query,
-                    PARTITIONS.min_xs[p_idx],
-                    PARTITIONS.min_ys[p_idx],
-                    PARTITIONS.min_zs[p_idx],
-                    PARTITIONS.max_xs[p_idx],
-                    PARTITIONS.max_ys[p_idx],
-                    PARTITIONS.max_zs[p_idx],
+                    partition_min_xs[p_idx],
+                    partition_min_ys[p_idx],
+                    partition_min_zs[p_idx],
+                    partition_max_xs[p_idx],
+                    partition_max_ys[p_idx],
+                    partition_max_zs[p_idx],
                 );
                 if dist2 < vote_partition_dist2 {
                     vote_partition_dist2 = dist2;
@@ -137,7 +159,7 @@ unsafe fn partition_search(
         if thread::thread_idx_x() as usize == 0 {
             let mut max_votes_idx = 0;
             let mut max_votes_count = 0;
-            for p_idx in 0..PARTITIONS.count {
+            for p_idx in 0..partition_count {
                 let votes_count = *partition_votes.add(p_idx);
 
                 // If the partition hasn't been visited yet...
@@ -172,10 +194,10 @@ unsafe fn partition_search(
         let partition_idx = *next_partition_idx;
 
         // Every thread in the block searches the partition with the most votes.
-        if partition_idx < PARTITIONS.count {
+        if partition_idx < partition_count {
             // Calculate the partition's start and end indices in the sorted_object arrays.
-            let partition_start = PARTITIONS.starts[partition_idx];
-            let partition_end = PARTITIONS.ends[partition_idx];
+            let partition_start = partition_starts[partition_idx];
+            let partition_end = partition_ends[partition_idx];
 
             // Loop through each point in partition, checking to see if it's the NN.
             for sorted_data_idx in partition_start..=partition_end {

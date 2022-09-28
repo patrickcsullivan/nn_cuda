@@ -79,7 +79,7 @@ fn benchmarks(
             point: [o.x, o.y, o.z],
         })
         .collect_vec();
-    let rtree_queries = queries.iter().map(|q| [q.x, q.y, q.z]).collect_vec();
+    let rtree_queries = sorted_queries.iter().map(|q| [q.x, q.y, q.z]).collect_vec();
     let rtree = RTree::bulk_load(rtree_objects);
 
     // Test with RTree multi-threaded.
@@ -93,7 +93,7 @@ fn benchmarks(
 
     // -------------------------------------------------------------------------
 
-    let fails = (0..queries.len())
+    let fails = (0..sorted_queries.len())
         .filter(|&i| bit_partition_results[i].unwrap().0 != rtree_results_mt[i].unwrap().index)
         .collect_vec();
     println!(
@@ -101,18 +101,20 @@ fn benchmarks(
         fails.len()
     );
 
-    let fails = (0..queries.len())
-        .filter(|&i| {
-            let query = queries[i];
-            let rtree_nn_idx = rtree_results_mt[i].unwrap().index;
-            let rtree_nn = objects[rtree_nn_idx];
-            let rtree_dist = query.distance(rtree_nn);
-
-            let bvh_dist = bit_partition_results[i].unwrap().1.sqrt();
-
-            (bvh_dist - rtree_dist).abs() > f32::EPSILON
+    let fails = sorted_queries
+        .iter()
+        .enumerate()
+        .filter(|&(i, q)| {
+            let bp_dist = bit_partition_results[i]
+                .map(|(_i, dist2)| dist2.sqrt())
+                .unwrap();
+            let rt_dist = rtree_results_mt[i]
+                .map(|pt| objects[pt.index].distance(*q))
+                .unwrap();
+            (bp_dist - rt_dist).abs() > f32::EPSILON
         })
         .collect_vec();
+
     println!(
         "Bit Partitions CUDA and rstar (8-core) find different NN dists on {} queries",
         fails.len()
