@@ -7,12 +7,9 @@ edition = "2021"
 
 [dependencies]
 bit_partition_search_cpu =  { path = "../bit_partition_search_cpu" }
-bvh_cpu =  { path = "../bvh_cpu" }
 cuda_std = "0.2.2"
 itertools = "0.10.3"
 kiddo = "0.2.4"
 ply-rs = "0.1.3"
 rayon = "1.5.3"
 rstar = "0.9.3"
-partition_search_cpu =  { path = "../partition_search_cpu" }
-rtree_cpu =  { path = "../rtree_cpu" }

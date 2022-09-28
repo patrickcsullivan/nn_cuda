@@ -3,12 +3,6 @@ members = [
   "app",
   "bit_partition_search_cpu",
   "bit_partition_search_gpu",
-  "bvh_cpu",
-  "bvh_gpu",
-  "partition_search_cpu",
-  "partition_search_gpu",
-  "rtree_cpu",
-  "rtree_gpu"
 ]
 
 [profile.dev.package.rustc_codegen_nvvm]
