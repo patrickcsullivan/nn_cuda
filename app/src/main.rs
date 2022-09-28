@@ -3,11 +3,10 @@ mod dragon;
 use cuda_std::vek::{Aabb, Vec3};
 use cust::stream::{Stream, StreamFlags};
 use itertools::Itertools;
-use kiddo::KdTree;
 use nn_cuda::morton::map_to_morton_codes_tmp;
 use nn_cuda::partition::BitPartitionSearch;
 use rayon::prelude::*;
-use rstar::{PointDistance, RTree, RTreeObject};
+use rstar::{RTree, RTreeObject};
 use std::{env, error::Error, time::Instant};
 
 fn main() -> Result<(), Box<dyn Error>> {
