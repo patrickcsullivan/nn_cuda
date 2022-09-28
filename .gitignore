@@ -2,3 +2,5 @@
 Cargo.lock
 **/.vscode
 *.ncu-rep
+
+app/data/ornate_wooden_door.ply

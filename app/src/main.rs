@@ -11,7 +11,7 @@ use std::{env, error::Error, time::Instant};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
-    let default_path = "./app/data/radiator.ply".to_string();
+    let default_path = "./app/data/ornate_wooden_door.ply".to_string();
     let path = args.get(1).unwrap_or(&default_path);
     ply_test(path)?;
     Ok(())
