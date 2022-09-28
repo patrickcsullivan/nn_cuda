@@ -1,4 +1,4 @@
-mod dragon;
+mod ply;
 
 use cuda_std::vek::{Aabb, Vec3};
 use cust::stream::{Stream, StreamFlags};
@@ -11,14 +11,14 @@ use std::{env, error::Error, time::Instant};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
-    let default_path = "./app/data/dragon_vrip.ply".to_string();
+    let default_path = "./app/data/radiator.ply".to_string();
     let path = args.get(1).unwrap_or(&default_path);
-    dragon_test(path)?;
+    ply_test(path)?;
     Ok(())
 }
 
-fn dragon_test(path: &str) -> Result<(), Box<dyn Error>> {
-    let mut objects = dragon::ply_vertices(path);
+fn ply_test(path: &str) -> Result<(), Box<dyn Error>> {
+    let mut objects = ply::ply_vertices(path);
 
     // Shift the objects so that the bounding box is centered on the origin.
     let mut aabb = get_aabb(&objects);

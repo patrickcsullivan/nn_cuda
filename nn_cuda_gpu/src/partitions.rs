@@ -1,7 +1,7 @@
 use cust_core::DeviceCopy;
 
-pub const PARTITION_BITS_COUNT: usize = 9;
-pub const MAX_PARTITIONS_COUNT: usize = 512; // 2^9 = 512
+pub const PARTITION_BITS_COUNT: usize = 12;
+pub const MAX_PARTITIONS_COUNT: usize = 4096; // 2^9 = 512
 
 /// Contains a the start and end index and the AABB for each partition.
 ///
