@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 nn_cuda =  { path = "../nn_cuda" }
 cuda_std = "0.2.2"
+cust = "0.3.2"
 itertools = "0.10.3"
 kiddo = "0.2.4"
 ply-rs = "0.1.3"

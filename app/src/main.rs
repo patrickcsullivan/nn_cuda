@@ -1,6 +1,7 @@
 mod dragon;
 
 use cuda_std::vek::{Aabb, Vec3};
+use cust::stream::{Stream, StreamFlags};
 use itertools::Itertools;
 use kiddo::KdTree;
 use nn_cuda::morton::map_to_morton_codes_tmp;
@@ -61,10 +62,12 @@ fn benchmarks(
         .collect_vec();
 
     // Test bit partition search CUDA.
+    let _ctx = cust::quick_init()?;
     let bit_partition_objs = objects.iter().map(|&v| PartitionObj(v)).collect_vec();
-    let partitions = BitPartitionSearch::new(&bit_partition_objs, aabb);
+    let partitions = BitPartitionSearch::new(&bit_partition_objs, aabb)?;
     let now = Instant::now();
-    let bit_partition_results = partitions.find_nns(&sorted_queries)?;
+    let stream = Stream::new(StreamFlags::NON_BLOCKING, None)?;
+    let bit_partition_results = partitions.find_nns(stream, &sorted_queries)?;
     let elapsed = now.elapsed();
     println!("Bit Partition Search CUDA:\t{:.2?}", elapsed);
 
