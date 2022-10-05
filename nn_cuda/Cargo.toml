@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 cuda_std = "0.2.2"
 cust = "0.3.2"
-nn_cuda_gpu = { path = "../nn_cuda_gpu" }
+bit_partition_gpu = { path = "../bit_partition_gpu" }
 itertools = "0.10.3"
 
 [build-dependencies]

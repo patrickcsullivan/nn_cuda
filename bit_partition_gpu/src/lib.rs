@@ -5,6 +5,6 @@
     register_attr(nvvm_internal)
 )]
 
-pub mod aabb;
 pub mod kernels;
-pub mod partitions;
+
+pub use kernels::PARTITION_BITS_COUNT;

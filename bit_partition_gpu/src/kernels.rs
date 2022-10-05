@@ -1,6 +1,7 @@
 use cuda_std::{prelude::*, shared_array, vek::Vec3};
 
-use crate::partitions::MAX_PARTITIONS_COUNT;
+pub const PARTITION_BITS_COUNT: usize = 9;
+pub const MAX_PARTITIONS_COUNT: usize = 512; // 2^9 = 512
 
 const OBJECTS_CACHE_SIZE: usize = 256; // 12 bytes per object
 

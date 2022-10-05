@@ -2,7 +2,7 @@
 members = [
   "app",
   "nn_cuda",
-  "nn_cuda_gpu",
+  "bit_partition_gpu",
 ]
 
 [profile.dev.package.rustc_codegen_nvvm]
