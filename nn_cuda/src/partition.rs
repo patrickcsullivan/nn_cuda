@@ -1,4 +1,4 @@
-use crate::morton::map_to_morton_codes;
+use crate::{morton::map_to_morton_codes, point::Point3};
 use bit_partition_gpu::PARTITION_BITS_COUNT;
 use cuda_std::vek::{Aabb, Vec3};
 use cust::prelude::*;
@@ -7,34 +7,36 @@ use std::{error::Error, time::Instant};
 
 static PTX: &str = include_str!("../../resources/bit_partition_gpu.ptx");
 
-pub struct BitPartitionSearch {
-    pub sorted_object_indices: Vec<usize>,
-    pub sorted_object_xs: Vec<f32>,
-    pub sorted_object_ys: Vec<f32>,
-    pub sorted_object_zs: Vec<f32>,
-
-    pub module: Module,
-    pub dev_sorted_object_indices: DeviceBuffer<usize>,
-    pub dev_sorted_object_xs: DeviceBuffer<f32>,
-    pub dev_sorted_object_ys: DeviceBuffer<f32>,
-    pub dev_sorted_object_zs: DeviceBuffer<f32>,
-    pub dev_partition_starts: DeviceBuffer<usize>,
-    pub dev_partition_ends: DeviceBuffer<usize>,
-    pub dev_partition_min_xs: DeviceBuffer<f32>,
-    pub dev_partition_min_ys: DeviceBuffer<f32>,
-    pub dev_partition_min_zs: DeviceBuffer<f32>,
-    pub dev_partition_max_xs: DeviceBuffer<f32>,
-    pub dev_partition_max_ys: DeviceBuffer<f32>,
-    pub dev_partition_max_zs: DeviceBuffer<f32>,
+pub struct BitPartitions<'a, T> {
+    objects: &'a [T],
+    module: Module,
+    dev_sorted_object_indices: DeviceBuffer<usize>,
+    dev_sorted_object_xs: DeviceBuffer<f32>,
+    dev_sorted_object_ys: DeviceBuffer<f32>,
+    dev_sorted_object_zs: DeviceBuffer<f32>,
+    dev_partition_starts: DeviceBuffer<usize>,
+    dev_partition_ends: DeviceBuffer<usize>,
+    dev_partition_min_xs: DeviceBuffer<f32>,
+    dev_partition_min_ys: DeviceBuffer<f32>,
+    dev_partition_min_zs: DeviceBuffer<f32>,
+    dev_partition_max_xs: DeviceBuffer<f32>,
+    dev_partition_max_ys: DeviceBuffer<f32>,
+    dev_partition_max_zs: DeviceBuffer<f32>,
 }
 
-impl BitPartitionSearch {
-    pub fn new<T>(objects: &[T], aabb: &Aabb<f32>) -> Result<Self, Box<dyn Error>>
-    where
-        T: HasVec3,
-    {
+impl<'a, T> BitPartitions<'a, T>
+where
+    &'a T: Point3,
+{
+    pub fn new(objects: &'a [T], aabb: &Aabb<f32>) -> Result<Self, Box<dyn Error>> {
         // Sort the objects along the Z-curve.
-        let vecs = objects.iter().map(|o| o.vec3()).collect_vec();
+        let vecs = objects
+            .iter()
+            .map(|o| {
+                let xyz = o.xyz();
+                Vec3::new(xyz[0], xyz[1], xyz[2])
+            })
+            .collect_vec();
         let morton_codes = map_to_morton_codes(&vecs, &aabb);
         let mut sorted_object_indices = (0..objects.len()).collect_vec();
         sorted_object_indices.sort_by_key(|&i| morton_codes[i]);
@@ -108,10 +110,7 @@ impl BitPartitionSearch {
         let dev_partition_max_zs = partition_max_zs.as_slice().as_dbuf()?;
 
         Ok(Self {
-            sorted_object_indices,
-            sorted_object_xs,
-            sorted_object_ys,
-            sorted_object_zs,
+            objects,
             module,
             dev_sorted_object_indices,
             dev_sorted_object_xs,
@@ -128,16 +127,27 @@ impl BitPartitionSearch {
         })
     }
 
-    pub fn find_nns(
+    pub fn find_nns<'b, Q>(
         &self,
         stream: Stream,
-        queries: &[Vec3<f32>],
+        queries: &'b [Q],
         queries_aabb: Option<Aabb<f32>>,
-    ) -> Result<Vec<Option<(usize, f32)>>, Box<dyn Error>> {
+    ) -> Result<Vec<&'a T>, Box<dyn Error>>
+    where
+        &'b Q: Point3,
+    {
+        let queries: Vec<Vec3<f32>> = queries
+            .into_iter()
+            .map(|q| {
+                let xyz = q.xyz();
+                Vec3::new(xyz[0], xyz[1], xyz[2])
+            })
+            .collect_vec();
+        let queries_aabb = queries_aabb.unwrap_or_else(|| get_aabb(&queries));
+
         // Radix sort queries.
         let now = Instant::now();
-        let queries_aabb = queries_aabb.unwrap_or_else(|| get_aabb(queries));
-        let morton_codes = map_to_morton_codes(queries, &queries_aabb);
+        let morton_codes = map_to_morton_codes(&queries, &queries_aabb);
         let mut sorted_query_indices = (0..queries.len()).collect_vec();
         sorted_query_indices.sort_by_key(|&i| morton_codes[i]);
         let sorted_queries = sorted_query_indices
@@ -211,20 +221,32 @@ impl BitPartitionSearch {
         // unsort them so that they are in the same order as the original
         // queries.
         let now = Instant::now();
-        let sorted_results = result_object_indices
-            .into_iter()
-            .zip(result_dist2s)
-            .map(|(i, d)| if d.is_finite() { Some((i, d)) } else { None })
-            .collect_vec();
-        let mut unsorted_results = vec![None; sorted_results.len()];
+
+        let mut original_order_nn_object_indices = vec![0; queries.len()];
         sorted_query_indices
-            .iter()
-            .zip(sorted_results)
-            .for_each(|(&i, r)| unsorted_results[i] = r);
+            .into_iter()
+            .zip(result_object_indices)
+            .for_each(|(qi, oi)| original_order_nn_object_indices[qi] = oi);
+        let original_order_nns = original_order_nn_object_indices
+            .into_iter()
+            .map(|oi| &self.objects[oi])
+            .collect_vec();
+        // let sorted_results = result_object_indices
+        //     .into_iter()
+        //     .zip(result_dist2s)
+        //     .map(|(i, d)| d.is_finite().then(|| i))
+        //     .collect_vec();
+        // let mut unsorted_results = vec![None; sorted_results.len()];
+        // sorted_query_indices
+        //     .iter()
+        //     .zip(sorted_results)
+        //     .for_each(|(&q_idx, option_o_idx)| {
+        //         unsorted_results[q_idx] = option_o_idx.map(|o_idx|
+        // self.objects[o_idx])     });
         let elapsed = now.elapsed();
         println!("\tpost process:\t{:.2?}", elapsed);
 
-        Ok(unsorted_results)
+        Ok(original_order_nns)
     }
 }
 
@@ -258,8 +280,4 @@ fn partition_by_bit_prefix(bits_count: u32, sorted_morton_codes: &[u32]) -> Vec<
     }
 
     partition_sizes
-}
-
-pub trait HasVec3 {
-    fn vec3(&self) -> Vec3<f32>;
 }
