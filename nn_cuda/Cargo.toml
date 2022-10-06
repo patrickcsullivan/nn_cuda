@@ -9,5 +9,16 @@ cust = "0.3.2"
 bit_partition_gpu = { path = "../bit_partition_gpu" }
 itertools = "0.10.3"
 
+[dev-dependencies]
+criterion = { version = "0.4", features = ["html_reports"] }
+rand = "0.8.5"
+rand_hc = "0.3.1"
+rayon = "1.5.3"
+rstar = "0.9.3"
+
 [build-dependencies]
 cuda_builder = "0.3.0"
+
+[[bench]]
+harness = false
+name = "bench_nn"

@@ -1,9 +1,17 @@
 [workspace]
 members = [
-  "app",
   "nn_cuda",
   "bit_partition_gpu",
 ]
 
 [profile.dev.package.rustc_codegen_nvvm]
 opt-level = 3
+
+# [profile.release]
+# codegen-units = 1
+# lto = true
+# opt-level = 3
+
+# [profile.bench]
+# debug = true
+# inherits = "release"
