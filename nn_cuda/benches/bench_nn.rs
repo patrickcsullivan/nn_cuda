@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion, SamplingMode};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, SamplingMode};
 use cuda_std::vek::{Aabb, Vec3};
 use cust::stream::{Stream, StreamFlags};
 use itertools::Itertools;
@@ -42,41 +42,51 @@ fn create_random_points(points_count: usize, rng: &mut impl Rng) -> Vec<[f32; 3]
 }
 
 pub fn nn_comparison(c: &mut Criterion) {
-    let mut rng = Hc128Rng::from_seed(*SEED);
-    let points = create_random_points(1_000_000, &mut rng);
-    let queries = create_random_points(10_000_000, &mut rng);
-    let points_aabb = get_aabb(&points);
-
-    // Prepare bit partition CUDA search.
-    let _ctx = cust::quick_init().unwrap();
-    let partition_points = points.iter().map(|&p| PartitionObj(p)).collect_vec();
-    let partition_queries = queries.iter().map(new_vec3).collect_vec();
-    let partitions = BitPartitionSearch::new(&partition_points, &points_aabb).unwrap();
-
-    // Prepare R* search.
-    let rtree = RTree::bulk_load(points);
-
     let mut group = c.benchmark_group("BitPartitions and RTree comparison");
     group.sample_size(10);
     group.sampling_mode(SamplingMode::Flat);
 
-    group.bench_function("BitPartitions", |b| {
-        b.iter(|| {
-            let stream = Stream::new(StreamFlags::NON_BLOCKING, None).unwrap();
-            let _ = partitions
-                .find_nns(stream, &partition_queries, None)
-                .unwrap();
-        })
-    });
+    for points_count in [500_000u64, 1_000_000u64, 5_000_000u64, 10_000_000u64] {
+        let mut rng = Hc128Rng::from_seed(*SEED);
+        let points = create_random_points(points_count as usize, &mut rng);
+        let queries = create_random_points(1_000_000, &mut rng);
+        let points_aabb = get_aabb(&points);
 
-    group.bench_function("RTree", |b| {
-        b.iter(|| {
-            let _: Vec<_> = queries
-                .par_iter()
-                .map(|q| rtree.nearest_neighbor(q))
-                .collect();
-        })
-    });
+        // Prepare bit partition CUDA search.
+        let _ctx = cust::quick_init().unwrap();
+        let partition_points = points.iter().map(|&p| PartitionObj(p)).collect_vec();
+        let partition_queries = queries.iter().map(new_vec3).collect_vec();
+        let partitions = BitPartitionSearch::new(&partition_points, &points_aabb).unwrap();
+
+        // Prepare R* search.
+        let rtree = RTree::bulk_load(points);
+
+        group.bench_with_input(
+            BenchmarkId::new("BitPartitions", points_count),
+            &points_count,
+            |b, _| {
+                b.iter(|| {
+                    let stream = Stream::new(StreamFlags::NON_BLOCKING, None).unwrap();
+                    let _ = partitions
+                        .find_nns(stream, &partition_queries, None)
+                        .unwrap();
+                })
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("RTree", points_count),
+            &points_count,
+            |b, _| {
+                b.iter(|| {
+                    let _: Vec<_> = queries
+                        .par_iter()
+                        .map(|q| rtree.nearest_neighbor(q))
+                        .collect();
+                })
+            },
+        );
+    }
 
     group.finish();
 }
