@@ -7,6 +7,7 @@ edition = "2021"
 cuda_std = "0.2.2"
 cust = "0.3.2"
 bit_partition_gpu = { path = "../bit_partition_gpu" }
+scan_gpu = { path = "../scan_gpu" }
 itertools = "0.10.3"
 
 [dev-dependencies]

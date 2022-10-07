@@ -5,4 +5,9 @@ fn main() {
         .copy_to("../resources/bit_partition_gpu.ptx")
         .build()
         .unwrap();
+
+    CudaBuilder::new("../scan_gpu")
+        .copy_to("../resources/scan_gpu.ptx")
+        .build()
+        .unwrap();
 }

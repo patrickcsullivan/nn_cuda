@@ -1,0 +1,11 @@
+[package]
+name = "scan_gpu"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cuda_std = "0.2.2"
+cust_core = "0.1.1"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
