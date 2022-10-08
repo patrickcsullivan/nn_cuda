@@ -1,8 +1,12 @@
+use crate::step::mult_step;
 use cuda_std::{kernel, shared_array, thread};
+
+/// The length of data to run the prefix operation on.
+pub const SECTION_SIZE: usize = 64;
 
 /// The kernel launch should use this as the block size so that the number of
 /// threads is equal to the number of section elements.
-pub const KOGGE_STONE_SECTION_SIZE: usize = 64;
+pub const BLOCK_SIZE: usize = SECTION_SIZE;
 
 /// Performs an inclusive prefix sum scan on the elements of a single 64-element
 /// block.
@@ -22,7 +26,7 @@ pub unsafe fn inclusive_kogge_stone_scan(xs: &[u32], ys: *mut u32) {
     let bd = thread::block_dim_x() as usize;
 
     // Width of the block and shared by the entire block.
-    let xys = shared_array![u32; KOGGE_STONE_SECTION_SIZE];
+    let xys = shared_array![u32; SECTION_SIZE];
 
     // Copy the contents of global memory xs into shared memory xys.
     let i = bi * bd + ti;
@@ -31,15 +35,12 @@ pub unsafe fn inclusive_kogge_stone_scan(xs: &[u32], ys: *mut u32) {
     }
 
     // Perform an iterative scan over xys.
-    let mut stride: usize = 1;
-    while stride < bd {
+    for stride in mult_step(1, 2).take_while(|&s| s < bd) {
         thread::sync_threads();
 
         if ti >= stride {
             *(&mut *xys.add(ti)) += *xys.add(ti - stride);
         }
-
-        stride *= 2;
     }
 
     // Copy the contents of shared memory xys into global memory ys.
