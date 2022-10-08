@@ -1,8 +1,8 @@
 use cust::prelude::*;
-use scan_gpu::kogge_stone::KOGGE_STONE_SECTION_SIZE;
+use kernel_tools::kogge_stone::KOGGE_STONE_SECTION_SIZE;
 use std::{error::Error, time::Instant};
 
-static PTX: &str = include_str!("../../resources/scan_gpu.ptx");
+static PTX: &str = include_str!("../../resources/kernel_tools.ptx");
 
 /// Inclusive scan.
 pub fn sequential_scan(xs: &[u32], ys: &mut [u32], max_i: usize) {

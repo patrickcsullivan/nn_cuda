@@ -6,8 +6,8 @@ fn main() {
         .build()
         .unwrap();
 
-    CudaBuilder::new("../scan_gpu")
-        .copy_to("../resources/scan_gpu.ptx")
+    CudaBuilder::new("../kernel_tools")
+        .copy_to("../resources/kernel_tools.ptx")
         .build()
         .unwrap();
 }

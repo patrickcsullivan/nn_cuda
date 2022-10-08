@@ -1,5 +1,5 @@
 [package]
-name = "scan_gpu"
+name = "kernel_tools"
 version = "0.1.0"
 edition = "2021"
 

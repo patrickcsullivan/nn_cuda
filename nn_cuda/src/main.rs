@@ -1,6 +1,6 @@
 use cust::stream::{Stream, StreamFlags};
+use kernel_tools::kogge_stone::KOGGE_STONE_SECTION_SIZE;
 use nn_cuda::scan;
-use scan_gpu::kogge_stone::KOGGE_STONE_SECTION_SIZE;
 
 pub fn main() {
     let _ctx = cust::quick_init().unwrap();
