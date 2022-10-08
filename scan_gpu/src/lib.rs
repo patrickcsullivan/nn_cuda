@@ -5,4 +5,5 @@
     register_attr(nvvm_internal)
 )]
 
-pub mod kernels;
+pub mod brent_kung;
+pub mod kogge_stone;
