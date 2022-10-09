@@ -34,8 +34,8 @@ impl Iterator for DivStep {
     }
 }
 
-// Returns an iterator that generates numbers by multiplying by the given
-// factor.
+// Returns an iterator that generates numbers by dividing by the given
+// denominator.
 pub fn div_step(init: usize, denom: usize) -> DivStep {
     DivStep { denom, next: init }
 }
