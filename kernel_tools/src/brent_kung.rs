@@ -3,7 +3,7 @@ use cuda_std::{kernel, shared_array, thread};
 use crate::step::{div_step, mult_step};
 
 /// The length of data to run the prefix operation on.
-pub const SECTION_SIZE: usize = 1024;
+pub const SECTION_SIZE: usize = 2048;
 
 /// The kernel launch should use this as the block size so that the number of
 /// threads is equal to half the number of section elements.
@@ -30,7 +30,7 @@ pub unsafe fn inclusive_brent_kung_scan(xs: &[u32], ys: *mut u32) {
 
     // Use a decreasing number of contiguous threads to peform reduction to compute
     // partial sums.
-    for stride in mult_step(1, 2).take_while(|&s| s < b_dim) {
+    for stride in mult_step(1, 2).take_while(|&s| s <= b_dim) {
         thread::sync_threads();
         let idx = (t_idx + 1) * 2 * stride - 1;
         if idx < SECTION_SIZE {
