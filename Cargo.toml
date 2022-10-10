@@ -3,6 +3,7 @@ members = [
   "nn_cuda",
   "bit_partition_gpu",
   "kernel_tools",
+  "rtree_gpu"
 ]
 
 [profile.dev.package.rustc_codegen_nvvm]

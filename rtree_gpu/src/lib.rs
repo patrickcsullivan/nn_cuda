@@ -6,5 +6,6 @@
 )]
 
 pub mod kernels;
+mod rtree;
 
 pub use kernels::PARTITION_BITS_COUNT;
