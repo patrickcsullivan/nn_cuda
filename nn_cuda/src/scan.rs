@@ -1,6 +1,6 @@
 use cust::prelude::*;
-use kernel_tools::{brent_kung, kogge_stone};
-use std::{error::Error, time::Instant};
+use kernel_tools::{brent_kung, kogge_stone, three_phase};
+use std::error::Error;
 
 static PTX: &str = include_str!("../../resources/kernel_tools.ptx");
 
@@ -58,6 +58,32 @@ pub fn brent_kung_scan(stream: &Stream, xs: &[u32]) -> Result<Vec<u32>, Box<dyn 
                 dev_xs.len(),
                 dev_ys.as_device_ptr(),
                 brent_kung::SECTION_SIZE
+            )
+        )?;
+    }
+    stream.synchronize()?;
+
+    dev_ys.copy_to(&mut ys)?;
+    Ok(ys)
+}
+
+/// Inclusive scan.
+pub fn three_phase_scan(stream: &Stream, xs: &[u32]) -> Result<Vec<u32>, Box<dyn Error>> {
+    let mut ys = vec![0u32; three_phase::SECTION_SIZE];
+
+    let dev_xs = xs.as_dbuf()?;
+    let dev_ys = ys.as_slice().as_dbuf()?;
+
+    let module = Module::from_ptx(PTX, &[])?;
+    let kernel = module.get_function("inclusive_three_phase_scan")?;
+
+    unsafe {
+        launch!(
+            kernel<<<1, three_phase::BLOCK_SIZE as u32, 0, stream>>>(
+                dev_xs.as_device_ptr(),
+                dev_xs.len(),
+                dev_ys.as_device_ptr(),
+                three_phase::SECTION_SIZE
             )
         )?;
     }

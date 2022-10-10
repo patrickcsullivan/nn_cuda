@@ -1,5 +1,5 @@
 use cust::stream::{Stream, StreamFlags};
-use kernel_tools::{brent_kung, kogge_stone};
+use kernel_tools::{brent_kung, kogge_stone, three_phase};
 use nn_cuda::scan;
 
 pub fn main() {
@@ -18,8 +18,12 @@ pub fn main() {
     println!("ys: {:?}", ys);
 
     let xs = [1u32; brent_kung::SECTION_SIZE];
-    let mut ys = [0u32; brent_kung::SECTION_SIZE];
     let ys = scan::brent_kung_scan(&stream, &xs);
+    println!("xs: {:?}", xs);
+    println!("ys: {:?}", ys);
+
+    let xs = [1u32; three_phase::SECTION_SIZE];
+    let ys = scan::three_phase_scan(&stream, &xs);
     println!("xs: {:?}", xs);
     println!("ys: {:?}", ys);
 }

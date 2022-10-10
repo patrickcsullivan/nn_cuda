@@ -2,6 +2,8 @@ use crate::step::mult_step;
 use cuda_std::{kernel, shared_array, thread};
 
 /// The length of data to run the prefix operation on.
+///
+/// The section size of this algorithm is limited by the maximum block size.
 pub const SECTION_SIZE: usize = 64;
 
 /// The kernel launch should use this as the block size so that the number of
