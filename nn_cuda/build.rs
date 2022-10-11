@@ -10,4 +10,9 @@ fn main() {
         .copy_to("../resources/kernel_tools.ptx")
         .build()
         .unwrap();
+
+    CudaBuilder::new("../rtree_gpu")
+        .copy_to("../resources/rtree_gpu.ptx")
+        .build()
+        .unwrap();
 }
