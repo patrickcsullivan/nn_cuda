@@ -12,4 +12,6 @@ pub mod kernels;
 mod mem;
 mod priority_queue;
 mod rtree;
+mod scan;
+mod step;
 mod vec3s;

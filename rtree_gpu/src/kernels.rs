@@ -1,6 +1,6 @@
 use cuda_std::{prelude::*, shared_array, vek::Vec3};
 
-use crate::{priority_queue::SharedPriorityQueue, rtree::RTree};
+use crate::{priority_queue::PriorityQueue, rtree::RTree};
 
 /// The number of elements in each node.
 pub const M: usize = 4;

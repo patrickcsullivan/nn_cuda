@@ -1,28 +1,20 @@
-use cuda_std::vek::Vec3;
+use cuda_std::vek::{Aabb, Vec3};
 
-pub fn dist2_to_point(p1: Vec3<f32>, p2_x: f32, p2_y: f32, p2_z: f32) -> f32 {
+pub fn to_point(p1: Vec3<f32>, p2_x: f32, p2_y: f32, p2_z: f32) -> f32 {
     let x = p2_x - p1.x;
     let y = p2_y - p1.y;
     let z = p2_z - p1.z;
     x * x + y * y + z * z
 }
 
-pub fn dist2_to_aabb(
-    p: Vec3<f32>,
-    min_x: f32,
-    min_y: f32,
-    min_z: f32,
-    max_x: f32,
-    max_y: f32,
-    max_z: f32,
-) -> f32 {
-    let x = dist2_to_range(p.x, min_x, max_x);
-    let y = dist2_to_range(p.y, min_y, max_y);
-    let z = dist2_to_range(p.z, min_z, max_z);
+pub fn to_aabb(p: &Vec3<f32>, aabb: &Aabb<f32>) -> f32 {
+    let x = to_range(p.x, aabb.min.x, aabb.max.x);
+    let y = to_range(p.y, aabb.min.y, aabb.min.z);
+    let z = to_range(p.z, aabb.min.z, aabb.max.z);
     x * x + y * y + z * z
 }
 
-fn dist2_to_range(val: f32, min: f32, max: f32) -> f32 {
+fn to_range(val: f32, min: f32, max: f32) -> f32 {
     if val < min {
         min - val
     } else if val > max {

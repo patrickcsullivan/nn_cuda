@@ -1,12 +1,12 @@
 use cuda_std::shared_array;
 
-pub struct SharedPriorityQueue {
+pub struct PriorityQueue {
     elements: *mut (usize, f32),
     max_size: usize,
     size: usize,
 }
 
-impl SharedPriorityQueue {
+impl PriorityQueue {
     pub fn new(start_pointer: *mut (usize, f32), max_size: usize) -> Self {
         Self {
             elements: start_pointer,
