@@ -122,7 +122,7 @@ unsafe fn find_neighbor(
     // column contains the squared distances to an individual query.
     let dist2s_mem = shared_array![f32; B * M];
 
-    let mut min_dist2 = f32::INFINITY;
+    let mut nn_dist2 = f32::INFINITY;
     let mut nn_object_idx = 0;
 
     // Perform a depth-first traversal of the tree.
@@ -161,7 +161,7 @@ unsafe fn find_neighbor(
                     };
 
                     let dist2 = dist2::to_aabb(&query, &aabb);
-                    let dist2 = if dist2 < min_dist2 {
+                    let dist2 = if dist2 < nn_dist2 {
                         dist2
                     } else {
                         // Save the squared distance as infinity to indicate that we will have
@@ -174,6 +174,32 @@ unsafe fn find_neighbor(
                 }
                 sync_threads();
 
+                // For each child node, find the minimum distance between the node and the
+                // threads' queries.
+                // TODO: Switch to efficient scan.
+                if t_idx < rtree.children_per_node {
+                    let mut min_dist2 = f32::INFINITY;
+                    for col_idx in 0..b_dim {
+                        let grid_idx = grid_index_at(b_dim, t_idx, col_idx);
+                        let dist2 = *dist2s_mem.add(grid_idx);
+                        if dist2 < min_dist2 {
+                            min_dist2 = dist2;
+                        }
+                    }
+
+                    let grid_idx = grid_index_at(b_dim, t_idx, b_dim - 1);
+                    *(&mut *dist2s_mem.add(grid_idx)) = min_dist2;
+                }
+
+                // for i in 0..self.children_per_node {
+                //     let shared_dist2s = shared_child_to_query_dist2s.get_row_ptr(i);
+                //     // We write the results of the scan back onto the row in the shared grid,
+                // so     // the last element of each row in the grid will
+                // contain the minimum squared     // distance.
+                //     min_scan_block(shared_dist2s, shared_dist2s, shared_scan_scratch);
+                //     sync_threads();
+                // }
+
                 // Add new nodes to the traversal queue.
                 for i in 0..rtree.children_per_node {
                     let child_idx = children_start_idx + i;
@@ -182,15 +208,16 @@ unsafe fn find_neighbor(
             }
             NodeContents::LeafObjects { start, end } => {
                 // Brute force search through each leaf.
+                // TODO: Use caching.
                 for so_idx in start..=end {
                     let x = sorted_object_xs[so_idx];
                     let y = sorted_object_ys[so_idx];
                     let z = sorted_object_zs[so_idx];
                     let dist2 = dist2::to_point(query, x, y, z);
 
-                    if dist2 < min_dist2 {
+                    if dist2 < nn_dist2 {
                         let o_idx = sorted_object_indices[so_idx];
-                        min_dist2 = dist2;
+                        nn_dist2 = dist2;
                         nn_object_idx = o_idx;
                     }
                 }
@@ -206,5 +233,5 @@ unsafe fn find_neighbor(
 }
 
 fn grid_index_at(row_width: usize, row_idx: usize, col_idx: usize) -> usize {
-    col_idx * row_width + row_idx
+    row_idx * row_width + col_idx
 }
