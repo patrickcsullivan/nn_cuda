@@ -106,15 +106,15 @@ unsafe fn find_neighbor(
     let mut nn_object_idx = 0;
 
     // Perform a depth-first traversal of the tree.
-    queue.push(rtree.root());
-    while let Some(_node_idx) = queue.top() {
-        queue.pop();
+    for node_idx in rtree.interior_count..rtree.node_min_xs.len() {
+        queue.push(node_idx);
+        while let Some(_node_idx) = queue.top() {
+            queue.pop();
 
-        // Brute force search through each leaf.
-        for node_idx in rtree.interior_count..rtree.node_min_xs.len() {
             match rtree.get_contents(node_idx) {
                 NodeContents::InteriorChildren { start } => todo!(),
                 NodeContents::LeafObjects { start, end } => {
+                    // Brute force search through each leaf.
                     for so_idx in start..=end {
                         let x = sorted_object_xs[so_idx];
                         let y = sorted_object_ys[so_idx];
