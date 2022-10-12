@@ -37,7 +37,9 @@ pub unsafe fn bulk_find_neighbors(
     //------
     results_object_indices: *mut usize,
 ) {
-    let rtree: RTree<M, H> = RTree {
+    let rtree = RTree::new(
+        H,
+        M,
         node_min_xs,
         node_min_ys,
         node_min_zs,
@@ -50,7 +52,7 @@ pub unsafe fn bulk_find_neighbors(
         sorted_object_xs,
         sorted_object_ys,
         sorted_object_zs,
-    };
+    );
 
     // Allocate shared memory.
     const QUEUE_SIZE: usize = M * H;
@@ -80,6 +82,6 @@ pub unsafe fn bulk_find_neighbors(
     }
 }
 
-unsafe fn find_neighbor(rtree: RTree<M, H>, query: Vec3<f32>) -> Option<usize> {
+unsafe fn find_neighbor(rtree: RTree, query: Vec3<f32>) -> Option<usize> {
     Some(42)
 }
