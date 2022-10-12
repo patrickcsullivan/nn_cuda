@@ -107,7 +107,10 @@ unsafe fn find_neighbor(
         queue.pop();
 
         // Brute force search through each leaf.
-        for (&start, &end) in rtree.leaf_starts.iter().zip(rtree.leaf_ends) {
+        for leaf_idx in 0..rtree.leaf_starts.len() {
+            let start = rtree.leaf_starts[leaf_idx];
+            let end = rtree.leaf_ends[leaf_idx];
+
             for so_idx in start..=end {
                 let x = sorted_object_xs[so_idx];
                 let y = sorted_object_ys[so_idx];
