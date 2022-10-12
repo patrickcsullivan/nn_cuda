@@ -9,7 +9,7 @@ pub fn to_point(p1: Vec3<f32>, p2_x: f32, p2_y: f32, p2_z: f32) -> f32 {
 
 pub fn to_aabb(p: &Vec3<f32>, aabb: &Aabb<f32>) -> f32 {
     let x = to_range(p.x, aabb.min.x, aabb.max.x);
-    let y = to_range(p.y, aabb.min.y, aabb.min.z);
+    let y = to_range(p.y, aabb.min.y, aabb.max.y);
     let z = to_range(p.z, aabb.min.z, aabb.max.z);
     x * x + y * y + z * z
 }

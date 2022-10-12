@@ -154,29 +154,29 @@ unsafe fn find_neighbor(
 
                 // Find the squared distance of each child to each thread's query.
                 for i in 0..rtree.children_per_node {
-                    // // Load the bounding box from shared memory.
-                    // let min_x = *children_min_xs_mem.add(i);
-                    // let min_y = *children_min_ys_mem.add(i);
-                    // let min_z = *children_min_zs_mem.add(i);
-                    // let max_x = *children_max_xs_mem.add(i);
-                    // let max_y = *children_max_ys_mem.add(i);
-                    // let max_z = *children_max_zs_mem.add(i);
-                    // let aabb = Aabb {
-                    //     min: Vec3::new(min_x, min_y, min_z),
-                    //     max: Vec3::new(max_x, max_y, max_z),
-                    // };
+                    // Load the bounding box from shared memory.
+                    let min_x = *children_min_xs_mem.add(i);
+                    let min_y = *children_min_ys_mem.add(i);
+                    let min_z = *children_min_zs_mem.add(i);
+                    let max_x = *children_max_xs_mem.add(i);
+                    let max_y = *children_max_ys_mem.add(i);
+                    let max_z = *children_max_zs_mem.add(i);
+                    let aabb = Aabb {
+                        min: Vec3::new(min_x, min_y, min_z),
+                        max: Vec3::new(max_x, max_y, max_z),
+                    };
 
-                    // let dist2 = dist2::to_aabb(&query, &aabb);
-                    // let dist2 = if dist2 < nn_dist2 {
-                    //     dist2
-                    // } else {
-                    //     // Save the squared distance as infinity to indicate that we will have
-                    //     // no need to visit the child node for the thread's query.
-                    //     f32::INFINITY
-                    // };
+                    let dist2 = dist2::to_aabb(&query, &aabb);
+                    let dist2 = if dist2 < nn_dist2 {
+                        dist2
+                    } else {
+                        // Save the squared distance as infinity to indicate that we will have
+                        // no need to visit the child node for the thread's query.
+                        f32::INFINITY
+                    };
 
                     let grid_idx = grid_index_at(b_dim, i, t_idx);
-                    *(&mut *dist2s_mem.add(grid_idx)) = 0.0;
+                    *(&mut *dist2s_mem.add(grid_idx)) = dist2;
                 }
                 sync_threads();
 
