@@ -1,4 +1,9 @@
-use cuda_std::vek::Vec3;
+use cuda_std::{
+    thread::{sync_threads, thread_idx_x},
+    vek::Vec3,
+};
+
+use crate::stack::Stack;
 
 #[derive(Clone, Copy)]
 pub struct RTree<'a> {
@@ -108,8 +113,22 @@ impl<'a> RTree<'a> {
         }
     }
 
-    pub fn find_neighbor(&self, query: Vec3<f32>) -> Option<usize> {
-        Some(42)
+    pub fn find_neighbor(&self, mut shared_queue: Stack<usize>, query: Vec3<f32>) -> Option<usize> {
+        let mut min_dist2 = f32::INFINITY;
+        let mut nn_object_idx = 42;
+
+        if thread_idx_x() as usize == 0 {
+            shared_queue.push(self.root());
+        }
+        sync_threads();
+
+        while let Some(node_idx) = shared_queue.pop() {}
+
+        if nn_object_idx < usize::MAX {
+            Some(0)
+        } else {
+            None
+        }
     }
 
     /// Returns the index of the root node.

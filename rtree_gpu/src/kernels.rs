@@ -1,4 +1,4 @@
-use crate::rtree::RTree;
+use crate::{rtree::RTree, stack::Stack};
 use cuda_std::{prelude::*, shared_array, vek::Vec3};
 
 /// The number of elements in each node.
@@ -55,6 +55,8 @@ pub unsafe fn bulk_find_neighbors(
 
     // Allocate shared memory.
     const QUEUE_SIZE: usize = M * H;
+    let queue_mem = shared_array![usize; QUEUE_SIZE];
+
     // let queue: SharedPriorityQueue<QUEUE_SIZE> =
     // SharedPriorityQueue::new_empty(); let dist2s_to_qs = shared_array![f32; M
     // * B ]; let shared_sorted_object_xs = shared_array![f32; O];
@@ -64,9 +66,10 @@ pub unsafe fn bulk_find_neighbors(
     let mut i = (thread::thread_idx_x() + thread::block_idx_x() * thread::block_dim_x()) as usize;
     while i < queries.len() {
         let query = queries[i];
+        let queue = Stack::new(queue_mem, QUEUE_SIZE);
 
         let nn_obj_idx = rtree.find_neighbor(
-            // queue,
+            queue,
             // dist2s_to_qs,
             // shared_sorted_object_xs,
             // shared_sorted_object_ys,
