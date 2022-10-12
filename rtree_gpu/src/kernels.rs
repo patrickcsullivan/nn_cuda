@@ -122,6 +122,10 @@ unsafe fn find_neighbor(
     // column contains the squared distances to an individual query.
     let dist2s_mem = shared_array![f32; B * M];
 
+    let xs_cache = shared_array![f32; OBJECTS_CACHE_SIZE];
+    let ys_cache = shared_array![f32; OBJECTS_CACHE_SIZE];
+    let zs_cache = shared_array![f32; OBJECTS_CACHE_SIZE];
+
     sync_threads();
 
     let mut nn_dist2 = f32::INFINITY;
@@ -220,15 +224,55 @@ unsafe fn find_neighbor(
                 sync_threads();
             }
             NodeContents::LeafObjects { start, end } => {
-                brute_force2(
-                    &mut nn_object_idx,
-                    &mut nn_dist2,
-                    &sorted_object_xs[start..=end],
-                    &sorted_object_ys[start..=end],
-                    &sorted_object_zs[start..=end],
-                    &sorted_object_indices[start..=end],
-                    query,
-                );
+                // Brute force search the objects in the leaf node.
+                let end = end + 1; // make end exclusive
+
+                let mut chunk_start = start;
+                while chunk_start < end {
+                    let chunk_end = (chunk_start + OBJECTS_CACHE_SIZE).min(end);
+                    let chunk_size = chunk_end - chunk_start;
+
+                    for i in 0..chunk_size {
+                        let x = sorted_object_xs[chunk_start + i];
+                        let y = sorted_object_ys[chunk_start + i];
+                        let z = sorted_object_zs[chunk_start + i];
+                        let dist2 = dist2::to_point(query, x, y, z);
+
+                        if dist2 < nn_dist2 {
+                            let o_idx = sorted_object_indices[chunk_start + i];
+                            nn_dist2 = dist2;
+                            nn_object_idx = o_idx;
+                        }
+                    }
+
+                    // // Load the next chunk into the cache.
+                    // sync_threads();
+                    // let mut i = thread_idx_x() as usize;
+                    // while i < chunk_size {
+                    //     let so_idx = chunk_start + i;
+                    //     *(&mut *xs_cache.add(i)) = sorted_object_xs[so_idx];
+                    //     *(&mut *ys_cache.add(i)) = sorted_object_ys[so_idx];
+                    //     *(&mut *zs_cache.add(i)) = sorted_object_zs[so_idx];
+                    //     i += block_dim_x() as usize;
+                    // }
+
+                    // // Scan the loaded chunk.
+                    // sync_threads();
+                    // for i in 0..chunk_size {
+                    //     let x = *xs_cache.add(i);
+                    //     let y = *ys_cache.add(i);
+                    //     let z = *zs_cache.add(i);
+                    //     let dist2 = dist2::to_point(query, x, y, z);
+
+                    //     if dist2 < nn_dist2 {
+                    //         let o_idx = sorted_object_indices[chunk_start + i];
+                    //         nn_dist2 = dist2;
+                    //         nn_object_idx = o_idx;
+                    //     }
+                    // }
+
+                    chunk_start += OBJECTS_CACHE_SIZE;
+                }
 
                 sync_threads();
             }
