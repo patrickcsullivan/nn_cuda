@@ -101,18 +101,18 @@ where
                     self.device_data.node_max_zs.len(),
                     //-----
                     self.device_data.leaf_starts.as_device_ptr(),
-                    self.device_data. leaf_starts.len(),
-                    self.device_data. leaf_ends.as_device_ptr(),
-                    self.device_data. leaf_ends.len(),
+                    self.device_data.leaf_starts.len(),
+                    self.device_data.leaf_ends.as_device_ptr(),
+                    self.device_data.leaf_ends.len(),
                     //-----
-                    self.device_data. sorted_object_indices.as_device_ptr(),
-                    self.device_data. sorted_object_indices.len(),
-                    self.device_data. sorted_object_xs.as_device_ptr(),
-                    self.device_data. sorted_object_xs.len(),
-                    self.device_data. sorted_object_ys.as_device_ptr(),
-                    self.device_data. sorted_object_ys.len(),
-                    self.device_data. sorted_object_zs.as_device_ptr(),
-                    self.device_data. sorted_object_zs.len(),
+                    self.device_data.sorted_object_indices.as_device_ptr(),
+                    self.device_data.sorted_object_indices.len(),
+                    self.device_data.sorted_object_xs.as_device_ptr(),
+                    self.device_data.sorted_object_xs.len(),
+                    self.device_data.sorted_object_ys.as_device_ptr(),
+                    self.device_data.sorted_object_ys.len(),
+                    self.device_data.sorted_object_zs.as_device_ptr(),
+                    self.device_data.sorted_object_zs.len(),
                     //-----
                     dev_queries.as_device_ptr(),
                     dev_queries.len(),
@@ -154,9 +154,18 @@ mod tests {
         let rtree = RTree::new(&points).unwrap();
         let nns = rtree.batch_find_neighbors(&stream, &queries).unwrap();
 
-        for (_q, nn) in queries.iter().zip(nns) {
-            assert_eq!(*nn, points[42]);
-        }
+        let q = queries[100];
+        let actual = nns[100].into_vec3();
+        let expected = find_neighbor_brute_force(&points, &q).into_vec3();
+
+        println!("q:\t{:?}", q.into_vec3());
+        println!("actual:\t{:?}", actual);
+        println!("expected:\t{:?}", expected);
+
+        assert_eq!(
+            actual.distance_squared(q.into_vec3()),
+            expected.distance_squared(q.into_vec3())
+        );
     }
 
     fn create_random_points(points_count: usize, rng: &mut impl Rng) -> Vec<PointObject> {

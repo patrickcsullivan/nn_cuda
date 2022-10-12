@@ -36,4 +36,15 @@ where
             None
         }
     }
+
+    pub fn top(&self) -> Option<T> {
+        if self.size > 0 {
+            unsafe {
+                let e = *self.elements.add(self.size - 1);
+                Some(e)
+            }
+        } else {
+            None
+        }
+    }
 }
