@@ -66,7 +66,13 @@ pub fn nn_comparison(c: &mut Criterion) {
     group.sample_size(10);
     group.sampling_mode(SamplingMode::Flat);
 
-    for points_count in [500_000u64, 1_000_000u64] {
+    for points_count in [
+        500_000u64,
+        1_000_000u64,
+        5_000_000u64,
+        10_000_000u64,
+        50_000_000u64,
+    ] {
         let _ctx = cust::quick_init().unwrap();
         let mut rng = Hc128Rng::from_seed(*SEED);
         let points = create_random_points(points_count as usize, &mut rng);
@@ -82,6 +88,7 @@ pub fn nn_comparison(c: &mut Criterion) {
         // Prepare R-tree GPU search.
         let rtree = RTree::new(&points).unwrap();
 
+        /*
         group.bench_with_input(
             BenchmarkId::new("BitPartitions", points_count),
             &points_count,
@@ -92,6 +99,7 @@ pub fn nn_comparison(c: &mut Criterion) {
                 })
             },
         );
+        */
 
         group.bench_with_input(
             BenchmarkId::new("RTree", points_count),
