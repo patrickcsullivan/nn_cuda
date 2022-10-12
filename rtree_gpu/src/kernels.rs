@@ -8,7 +8,7 @@ use cuda_std::{
     prelude::*,
     shared_array,
     thread::{block_dim_x, block_idx_x, sync_threads, thread_idx_x},
-    vek::Vec3,
+    vek::{Aabb, Vec3},
 };
 
 /// The number of elements in each node.
@@ -116,6 +116,12 @@ unsafe fn find_neighbor(
     let children_max_ys_mem = shared_array![f32; M];
     let children_max_zs_mem = shared_array![f32; M];
 
+    // Initialize the shared memory for storing the squared distances between the
+    // block's queries and the current node's children. The grid is row-major. Each
+    // row contains the squared distances to an individual child node, and each
+    // column contains the squared distances to an individual query.
+    let dist2s_mem = shared_array![f32; B * M];
+
     let mut min_dist2 = f32::INFINITY;
     let mut nn_object_idx = 0;
 
@@ -137,6 +143,34 @@ unsafe fn find_neighbor(
                     *(&mut *children_max_xs_mem.add(t_idx)) = rtree.node_max_xs[child_idx];
                     *(&mut *children_max_ys_mem.add(t_idx)) = rtree.node_max_ys[child_idx];
                     *(&mut *children_max_zs_mem.add(t_idx)) = rtree.node_max_zs[child_idx];
+                }
+                sync_threads();
+
+                // Find the squared distance of each child to each thread's query.
+                for i in 0..rtree.children_per_node {
+                    // Load the bounding box from shared memory.
+                    let min_x = *children_min_xs_mem.add(i);
+                    let min_y = *children_min_ys_mem.add(i);
+                    let min_z = *children_min_zs_mem.add(i);
+                    let max_x = *children_max_xs_mem.add(i);
+                    let max_y = *children_max_ys_mem.add(i);
+                    let max_z = *children_max_zs_mem.add(i);
+                    let aabb = Aabb {
+                        min: Vec3::new(min_x, min_y, min_z),
+                        max: Vec3::new(max_x, max_y, max_z),
+                    };
+
+                    let dist2 = dist2::to_aabb(&query, &aabb);
+                    let dist2 = if dist2 < min_dist2 {
+                        dist2
+                    } else {
+                        // Save the squared distance as infinity to indicate that we will have
+                        // no need to visit the child node for the thread's query.
+                        f32::INFINITY
+                    };
+
+                    let grid_idx = grid_index_at(b_dim, i, t_idx);
+                    *(&mut *dist2s_mem.add(grid_idx)) = dist2;
                 }
                 sync_threads();
 
@@ -169,4 +203,8 @@ unsafe fn find_neighbor(
     } else {
         None
     }
+}
+
+fn grid_index_at(row_width: usize, row_idx: usize, col_idx: usize) -> usize {
+    col_idx * row_width + row_idx
 }
