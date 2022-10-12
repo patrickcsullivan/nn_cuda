@@ -16,7 +16,6 @@ where
                 *(&mut *size_ptr) = 0;
             }
         }
-        sync_threads();
 
         Self {
             elements: elements_ptr,
@@ -35,7 +34,6 @@ where
                 }
             }
         }
-        sync_threads();
     }
 
     pub fn pop(&mut self) {
@@ -47,7 +45,6 @@ where
                 }
             }
         }
-        sync_threads();
     }
 
     pub fn top(&self) -> Option<T> {

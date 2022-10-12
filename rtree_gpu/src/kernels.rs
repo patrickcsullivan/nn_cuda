@@ -1,5 +1,5 @@
 use crate::{
-    dist2,
+    dist2, grid,
     rtree::{NodeContents, RTree},
     shared_aabbs::SharedAabbs,
     shared_stack::SharedStack,
@@ -122,13 +122,19 @@ unsafe fn find_neighbor(
     // column contains the squared distances to an individual query.
     let dist2s_mem = shared_array![f32; B * M];
 
+    sync_threads();
+
     let mut nn_dist2 = f32::INFINITY;
     let mut nn_object_idx = 0;
 
     // Perform a depth-first traversal of the tree.
     queue.push(rtree.root());
+    sync_threads();
     while let Some(node_idx) = queue.top() {
         queue.pop();
+        // TODO: May not be necessary if other syncs happen before the queue is read
+        // again. Though that may not happen in the leaf case.
+        sync_threads();
 
         match rtree.get_contents(node_idx) {
             NodeContents::InteriorChildren {
@@ -148,29 +154,29 @@ unsafe fn find_neighbor(
 
                 // Find the squared distance of each child to each thread's query.
                 for i in 0..rtree.children_per_node {
-                    // Load the bounding box from shared memory.
-                    let min_x = *children_min_xs_mem.add(i);
-                    let min_y = *children_min_ys_mem.add(i);
-                    let min_z = *children_min_zs_mem.add(i);
-                    let max_x = *children_max_xs_mem.add(i);
-                    let max_y = *children_max_ys_mem.add(i);
-                    let max_z = *children_max_zs_mem.add(i);
-                    let aabb = Aabb {
-                        min: Vec3::new(min_x, min_y, min_z),
-                        max: Vec3::new(max_x, max_y, max_z),
-                    };
+                    // // Load the bounding box from shared memory.
+                    // let min_x = *children_min_xs_mem.add(i);
+                    // let min_y = *children_min_ys_mem.add(i);
+                    // let min_z = *children_min_zs_mem.add(i);
+                    // let max_x = *children_max_xs_mem.add(i);
+                    // let max_y = *children_max_ys_mem.add(i);
+                    // let max_z = *children_max_zs_mem.add(i);
+                    // let aabb = Aabb {
+                    //     min: Vec3::new(min_x, min_y, min_z),
+                    //     max: Vec3::new(max_x, max_y, max_z),
+                    // };
 
-                    let dist2 = dist2::to_aabb(&query, &aabb);
-                    let dist2 = if dist2 < nn_dist2 {
-                        dist2
-                    } else {
-                        // Save the squared distance as infinity to indicate that we will have
-                        // no need to visit the child node for the thread's query.
-                        f32::INFINITY
-                    };
+                    // let dist2 = dist2::to_aabb(&query, &aabb);
+                    // let dist2 = if dist2 < nn_dist2 {
+                    //     dist2
+                    // } else {
+                    //     // Save the squared distance as infinity to indicate that we will have
+                    //     // no need to visit the child node for the thread's query.
+                    //     f32::INFINITY
+                    // };
 
                     let grid_idx = grid_index_at(b_dim, i, t_idx);
-                    *(&mut *dist2s_mem.add(grid_idx)) = dist2;
+                    *(&mut *dist2s_mem.add(grid_idx)) = 0.0;
                 }
                 sync_threads();
 
@@ -187,24 +193,31 @@ unsafe fn find_neighbor(
                         }
                     }
 
+                    // We write the results of the scan back onto the row in the shared grid, so
+                    // the last element of each row in the grid will contain the minimum squared
+                    // distance.
                     let grid_idx = grid_index_at(b_dim, t_idx, b_dim - 1);
                     *(&mut *dist2s_mem.add(grid_idx)) = min_dist2;
                 }
-
-                // for i in 0..self.children_per_node {
-                //     let shared_dist2s = shared_child_to_query_dist2s.get_row_ptr(i);
-                //     // We write the results of the scan back onto the row in the shared grid,
-                // so     // the last element of each row in the grid will
-                // contain the minimum squared     // distance.
-                //     min_scan_block(shared_dist2s, shared_dist2s, shared_scan_scratch);
-                //     sync_threads();
-                // }
+                sync_threads();
 
                 // Add new nodes to the traversal queue.
-                for i in 0..rtree.children_per_node {
-                    let child_idx = children_start_idx + i;
-                    queue.push(child_idx);
+                if t_idx == 0 {
+                    for i in 0..rtree.children_per_node {
+                        // Get the minimum distance for each child node from the last element of
+                        // each row in the grid.
+                        let grid_idx = grid_index_at(b_dim, i, b_dim - 1);
+                        let dist2 = *dist2s_mem.add(grid_idx);
+
+                        // A child node will have a finite minimum distance if it potentially
+                        // contains a nearest neighbor for at least one thread's query.
+                        if dist2 < f32::INFINITY {
+                            let child_idx = children_start_idx + i;
+                            queue.push(child_idx);
+                        }
+                    }
                 }
+                sync_threads();
             }
             NodeContents::LeafObjects { start, end } => {
                 // Brute force search through each leaf.
