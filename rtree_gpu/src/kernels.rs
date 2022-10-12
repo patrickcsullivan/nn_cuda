@@ -132,9 +132,9 @@ unsafe fn find_neighbor(
     sync_threads();
     while let Some(node_idx) = queue.top() {
         queue.pop();
+        sync_threads();
         // TODO: May not be necessary if other syncs happen before the queue is read
         // again. Though that may not happen in the leaf case.
-        sync_threads();
 
         match rtree.get_contents(node_idx) {
             NodeContents::InteriorChildren {
@@ -220,7 +220,7 @@ unsafe fn find_neighbor(
                 sync_threads();
             }
             NodeContents::LeafObjects { start, end } => {
-                brute_force(
+                brute_force1(
                     &mut nn_object_idx,
                     &mut nn_dist2,
                     &sorted_object_xs[start..=end],
@@ -229,6 +229,8 @@ unsafe fn find_neighbor(
                     &sorted_object_indices[start..=end],
                     query,
                 );
+
+                sync_threads();
             }
         }
     }
@@ -244,7 +246,7 @@ fn grid_index_at(row_width: usize, row_idx: usize, col_idx: usize) -> usize {
     row_idx * row_width + col_idx
 }
 
-fn brute_force(
+fn brute_force1(
     nn_object_idx: &mut usize,
     nn_dist2: &mut f32,
     sorted_object_xs: &[f32],
@@ -263,6 +265,51 @@ fn brute_force(
             let o_idx = sorted_object_indices[i];
             *nn_dist2 = dist2;
             *nn_object_idx = o_idx;
+        }
+    }
+}
+
+fn brute_force2(
+    nn_object_idx: &mut usize,
+    nn_dist2: &mut f32,
+    sorted_object_xs: &[f32],
+    sorted_object_ys: &[f32],
+    sorted_object_zs: &[f32],
+    sorted_object_indices: &[usize],
+    query: Vec3<f32>,
+) {
+    let xs_cache = shared_array![f32; OBJECTS_CACHE_SIZE];
+    let ys_cache = shared_array![f32; OBJECTS_CACHE_SIZE];
+    let zs_cache = shared_array![f32; OBJECTS_CACHE_SIZE];
+
+    for chunk_start in (0..sorted_object_indices.len()).step_by(OBJECTS_CACHE_SIZE) {
+        let chunk_end = (chunk_start + OBJECTS_CACHE_SIZE).min(sorted_object_indices.len());
+        let chunk_size = chunk_end - chunk_start;
+
+        // Load the next chunk into the cache.
+        sync_threads();
+        for i in (thread_idx_x() as usize..chunk_size).step_by(block_dim_x() as usize) {
+            let so_idx = chunk_start + i;
+            unsafe {
+                *(&mut *xs_cache.add(i)) = sorted_object_xs[so_idx];
+                *(&mut *ys_cache.add(i)) = sorted_object_ys[so_idx];
+                *(&mut *zs_cache.add(i)) = sorted_object_zs[so_idx];
+            }
+        }
+
+        // Scan the loaded chunk.
+        sync_threads();
+        for i in 0..chunk_size {
+            let x = unsafe { *xs_cache.add(i) };
+            let y = unsafe { *ys_cache.add(i) };
+            let z = unsafe { *zs_cache.add(i) };
+            let dist2 = dist2::to_point(query, x, y, z);
+
+            if dist2 < *nn_dist2 {
+                let o_idx = sorted_object_indices[chunk_start + i];
+                *nn_dist2 = dist2;
+                *nn_object_idx = o_idx;
+            }
         }
     }
 }
