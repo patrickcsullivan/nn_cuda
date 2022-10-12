@@ -1,5 +1,10 @@
 use crate::{dist2, rtree::RTree, stack::Stack};
-use cuda_std::{prelude::*, shared_array, thread::thread_idx_x, vek::Vec3};
+use cuda_std::{
+    prelude::*,
+    shared_array,
+    thread::{sync_threads, thread_idx_x},
+    vek::Vec3,
+};
 
 /// The number of elements in each node.
 pub const M: usize = 4;
@@ -13,6 +18,8 @@ pub const B: usize = 32;
 // The number of elements to store in the objects caches that are used during
 // brute force search of the leaf nodes.
 pub const OBJECTS_CACHE_SIZE: usize = 256;
+
+pub const QUEUE_SIZE: usize = M * H;
 
 #[kernel]
 #[allow(improper_ctypes_definitions, clippy::missing_safety_doc)]
@@ -55,6 +62,9 @@ pub unsafe fn bulk_find_neighbors(
         sorted_object_zs,
     );
 
+    // Allocate shared memory for queue.
+    // let queue_mem = shared_array![usize; QUEUE_SIZE];
+
     let mut i = (thread::thread_idx_x() + thread::block_idx_x() * thread::block_dim_x()) as usize;
     while i < queries.len() {
         let query = queries[i];
@@ -65,6 +75,7 @@ pub unsafe fn bulk_find_neighbors(
             sorted_object_xs,
             sorted_object_ys,
             sorted_object_zs,
+            // queue_mem,
             query,
         );
 
@@ -79,23 +90,34 @@ unsafe fn find_neighbor(
     sorted_object_xs: &[f32],
     sorted_object_ys: &[f32],
     sorted_object_zs: &[f32],
+    // queue_mem: *mut usize,
     query: Vec3<f32>,
 ) -> Option<usize> {
+    let mut queue_mem: [usize; QUEUE_SIZE] = [0; QUEUE_SIZE];
+    let mut queue = Stack::new(queue_mem.as_mut_ptr(), QUEUE_SIZE);
+
     let mut min_dist2 = f32::INFINITY;
     let mut nn_object_idx = 0;
 
-    // Brute force search through each leaf.
-    for (&start, &end) in rtree.leaf_starts.iter().zip(rtree.leaf_ends) {
-        for so_idx in start..=end {
-            let x = sorted_object_xs[so_idx];
-            let y = sorted_object_ys[so_idx];
-            let z = sorted_object_zs[so_idx];
-            let dist2 = dist2::to_point(query, x, y, z);
+    // Start the depth-first search at the root.
+    queue.push(rtree.root());
 
-            if dist2 < min_dist2 {
-                let o_idx = sorted_object_indices[so_idx];
-                min_dist2 = dist2;
-                nn_object_idx = o_idx;
+    while let Some(_node_idx) = queue.top() {
+        queue.pop();
+
+        // Brute force search through each leaf.
+        for (&start, &end) in rtree.leaf_starts.iter().zip(rtree.leaf_ends) {
+            for so_idx in start..=end {
+                let x = sorted_object_xs[so_idx];
+                let y = sorted_object_ys[so_idx];
+                let z = sorted_object_zs[so_idx];
+                let dist2 = dist2::to_point(query, x, y, z);
+
+                if dist2 < min_dist2 {
+                    let o_idx = sorted_object_indices[so_idx];
+                    min_dist2 = dist2;
+                    nn_object_idx = o_idx;
+                }
             }
         }
     }

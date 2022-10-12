@@ -114,13 +114,13 @@ impl<'a> RTree<'a> {
     }
 
     /// Returns the index of the root node.
-    fn root(&self) -> usize {
+    pub fn root(&self) -> usize {
         0
     }
 
     /// Returns the child node start and end indices if the node is interior or
     /// the object start and end indices if the node is a leaf.
-    fn get_contents(self, node_idx: usize) -> NodeContents {
+    pub fn get_contents(self, node_idx: usize) -> NodeContents {
         if self.is_interior(node_idx) {
             NodeContents::InteriorChildren {
                 start: self.first_child_index(node_idx),
