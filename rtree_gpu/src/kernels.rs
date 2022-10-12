@@ -1,4 +1,4 @@
-use crate::{dist2, rtree::RTree, stack::Stack};
+use crate::{dist2, rtree::RTree, stack::SharedStack};
 use cuda_std::{
     prelude::*,
     shared_array,
@@ -93,15 +93,16 @@ unsafe fn find_neighbor(
     // queue_mem: *mut usize,
     query: Vec3<f32>,
 ) -> Option<usize> {
-    let mut queue_mem: [usize; QUEUE_SIZE] = [0; QUEUE_SIZE];
-    let mut queue = Stack::new(queue_mem.as_mut_ptr(), QUEUE_SIZE);
+    // Initialize a traversal queue in shared memory.
+    let queue_elements_mem = shared_array![usize; QUEUE_SIZE];
+    let queue_size_mem = shared_array![usize; 1];
+    let mut queue = SharedStack::new(queue_elements_mem, queue_size_mem, QUEUE_SIZE);
 
     let mut min_dist2 = f32::INFINITY;
     let mut nn_object_idx = 0;
 
-    // Start the depth-first search at the root.
+    // Perform a depth-first traversal of the tree.
     queue.push(rtree.root());
-
     while let Some(_node_idx) = queue.top() {
         queue.pop();
 

@@ -3,7 +3,7 @@ use cuda_std::{
     vek::Vec3,
 };
 
-use crate::{dist2, stack::Stack};
+use crate::{dist2, stack::SharedStack};
 
 #[derive(Clone, Copy)]
 pub struct RTree<'a> {
