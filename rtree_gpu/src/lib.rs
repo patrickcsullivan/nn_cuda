@@ -5,7 +5,6 @@
     register_attr(nvvm_internal)
 )]
 
-mod aabbs;
 mod dist2;
 mod grid;
 pub mod kernels;
@@ -13,6 +12,7 @@ mod mem;
 mod priority_queue;
 mod rtree;
 mod scan;
-mod stack;
+mod shared_aabbs;
+mod shared_stack;
 mod step;
 mod vec3s;

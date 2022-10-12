@@ -1,7 +1,7 @@
 use cuda_std::vek::{Aabb, Vec3};
 
 /// Contains axis-aligned bounding boxes organized as a struct of arrays.
-pub struct Aabbs {
+pub struct SharedAabbs {
     pub min_xs: *mut f32,
     pub min_ys: *mut f32,
     pub min_zs: *mut f32,
@@ -10,7 +10,7 @@ pub struct Aabbs {
     pub max_zs: *mut f32,
 }
 
-impl Aabbs {
+impl SharedAabbs {
     pub fn new(
         min_xs: *mut f32,
         min_ys: *mut f32,

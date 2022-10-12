@@ -3,7 +3,7 @@ use cuda_std::{
     vek::Vec3,
 };
 
-use crate::{dist2, stack::SharedStack};
+use crate::{dist2, mem::copy_slice, shared_aabbs::SharedAabbs, shared_stack::SharedStack};
 
 #[derive(Clone, Copy)]
 pub struct RTree<'a> {
@@ -143,5 +143,58 @@ impl<'a> RTree<'a> {
     /// Returns the index of the first child of the specified node.
     fn first_child_index(&self, node_idx: usize) -> usize {
         self.children_per_node * node_idx + 1
+    }
+
+    /// Copies the bounding boxes of the children at `children_start` into
+    /// shared memory.
+    ///
+    /// * `shared_aabbs` - The shared memory into which the bounding boxes will
+    ///   be copied.
+    /// * `children_start` - An index into the R-tree's heap of nodes that
+    ///   points to the first child node to copy.
+    pub fn copy_children_into_shared(&self, shared_aabbs: &mut SharedAabbs, children_start: usize) {
+        copy_slice(
+            self.node_min_xs,
+            children_start,
+            shared_aabbs.min_xs,
+            0,
+            self.children_per_node,
+        );
+        copy_slice(
+            self.node_min_ys,
+            children_start,
+            shared_aabbs.min_ys,
+            0,
+            self.children_per_node,
+        );
+        copy_slice(
+            self.node_min_zs,
+            children_start,
+            shared_aabbs.min_zs,
+            0,
+            self.children_per_node,
+        );
+        copy_slice(
+            self.node_max_xs,
+            children_start,
+            shared_aabbs.max_xs,
+            0,
+            self.children_per_node,
+        );
+        copy_slice(
+            self.node_max_ys,
+            children_start,
+            shared_aabbs.max_ys,
+            0,
+            self.children_per_node,
+        );
+        copy_slice(
+            self.node_max_zs,
+            children_start,
+            shared_aabbs.max_zs,
+            0,
+            self.children_per_node,
+        );
+        sync_threads();
     }
 }

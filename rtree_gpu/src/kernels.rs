@@ -1,12 +1,13 @@
 use crate::{
     dist2,
     rtree::{NodeContents, RTree},
-    stack::SharedStack,
+    shared_aabbs::SharedAabbs,
+    shared_stack::SharedStack,
 };
 use cuda_std::{
     prelude::*,
     shared_array,
-    thread::{sync_threads, thread_idx_x},
+    thread::{block_dim_x, block_idx_x, sync_threads, thread_idx_x},
     vek::Vec3,
 };
 
@@ -97,10 +98,23 @@ unsafe fn find_neighbor(
     // queue_mem: *mut usize,
     query: Vec3<f32>,
 ) -> Option<usize> {
+    let t_idx = thread_idx_x() as usize;
+    let b_idx = block_idx_x() as usize;
+    let b_dim = block_dim_x() as usize;
+
     // Initialize a traversal queue in shared memory.
     let queue_elements_mem = shared_array![usize; QUEUE_SIZE];
     let queue_size_mem = shared_array![usize; 1];
     let mut queue = SharedStack::new(queue_elements_mem, queue_size_mem, QUEUE_SIZE);
+
+    // Initialize shared memory for storing the bounding boxes of the current node's
+    // children.
+    let children_min_xs_mem = shared_array![f32; M];
+    let children_min_ys_mem = shared_array![f32; M];
+    let children_min_zs_mem = shared_array![f32; M];
+    let children_max_xs_mem = shared_array![f32; M];
+    let children_max_ys_mem = shared_array![f32; M];
+    let children_max_zs_mem = shared_array![f32; M];
 
     let mut min_dist2 = f32::INFINITY;
     let mut nn_object_idx = 0;
@@ -114,6 +128,19 @@ unsafe fn find_neighbor(
             NodeContents::InteriorChildren {
                 start: children_start_idx,
             } => {
+                // Load the AABBs for the node's children into shared memory.
+                if t_idx < rtree.children_per_node {
+                    let child_idx = children_start_idx + t_idx;
+                    *(&mut *children_min_xs_mem.add(t_idx)) = rtree.node_min_xs[child_idx];
+                    *(&mut *children_min_ys_mem.add(t_idx)) = rtree.node_min_ys[child_idx];
+                    *(&mut *children_min_zs_mem.add(t_idx)) = rtree.node_min_zs[child_idx];
+                    *(&mut *children_max_xs_mem.add(t_idx)) = rtree.node_max_xs[child_idx];
+                    *(&mut *children_max_ys_mem.add(t_idx)) = rtree.node_max_ys[child_idx];
+                    *(&mut *children_max_zs_mem.add(t_idx)) = rtree.node_max_zs[child_idx];
+                }
+                sync_threads();
+
+                // Add new nodes to the traversal queue.
                 for i in 0..rtree.children_per_node {
                     let child_idx = children_start_idx + i;
                     queue.push(child_idx);
