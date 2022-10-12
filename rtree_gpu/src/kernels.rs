@@ -1,4 +1,8 @@
-use crate::{dist2, rtree::RTree, stack::SharedStack};
+use crate::{
+    dist2,
+    rtree::{NodeContents, RTree},
+    stack::SharedStack,
+};
 use cuda_std::{
     prelude::*,
     shared_array,
@@ -108,20 +112,21 @@ unsafe fn find_neighbor(
 
         // Brute force search through each leaf.
         for node_idx in rtree.interior_count..rtree.node_min_xs.len() {
-            let leaf_idx = node_idx - rtree.interior_count;
-            let start = rtree.leaf_starts[leaf_idx];
-            let end = rtree.leaf_ends[leaf_idx];
+            match rtree.get_contents(node_idx) {
+                NodeContents::InteriorChildren { start } => todo!(),
+                NodeContents::LeafObjects { start, end } => {
+                    for so_idx in start..=end {
+                        let x = sorted_object_xs[so_idx];
+                        let y = sorted_object_ys[so_idx];
+                        let z = sorted_object_zs[so_idx];
+                        let dist2 = dist2::to_point(query, x, y, z);
 
-            for so_idx in start..=end {
-                let x = sorted_object_xs[so_idx];
-                let y = sorted_object_ys[so_idx];
-                let z = sorted_object_zs[so_idx];
-                let dist2 = dist2::to_point(query, x, y, z);
-
-                if dist2 < min_dist2 {
-                    let o_idx = sorted_object_indices[so_idx];
-                    min_dist2 = dist2;
-                    nn_object_idx = o_idx;
+                        if dist2 < min_dist2 {
+                            let o_idx = sorted_object_indices[so_idx];
+                            min_dist2 = dist2;
+                            nn_object_idx = o_idx;
+                        }
+                    }
                 }
             }
         }
