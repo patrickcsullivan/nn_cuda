@@ -155,7 +155,7 @@ where
             .map(|&i| queries[i])
             .collect_vec();
         let elapsed = now.elapsed();
-        println!("\tradix sorting queries:\t{:.2?}", elapsed);
+        //println!("\tradix sorting queries:\t{:.2?}", elapsed);
 
         // Allocate memory on the CPU for results.
         let mut result_object_indices = vec![0usize; queries.len()];
@@ -208,14 +208,14 @@ where
         }
         stream.synchronize()?;
         let elapsed = now.elapsed();
-        println!("\trunning kernel:\t{:.2?}", elapsed);
+        //println!("\trunning kernel:\t{:.2?}", elapsed);
 
         // Copy results from GPU back to CPU.
         let now = Instant::now();
         dev_result_object_indices.copy_to(&mut result_object_indices)?;
         dev_result_dist2s.copy_to(&mut result_dist2s)?;
         let elapsed = now.elapsed();
-        println!("\tdevice -> host:\t{:.2?}", elapsed);
+        //println!("\tdevice -> host:\t{:.2?}", elapsed);
 
         // Results are generated in the same order as the sorted queries. We should
         // unsort them so that they are in the same order as the original
@@ -244,7 +244,7 @@ where
         //         unsorted_results[q_idx] = option_o_idx.map(|o_idx|
         // self.objects[o_idx])     });
         let elapsed = now.elapsed();
-        println!("\tpost process:\t{:.2?}", elapsed);
+        //println!("\tpost process:\t{:.2?}", elapsed);
 
         Ok(original_order_nns)
     }

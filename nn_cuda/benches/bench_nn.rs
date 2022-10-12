@@ -66,7 +66,7 @@ pub fn nn_comparison(c: &mut Criterion) {
     group.sample_size(10);
     group.sampling_mode(SamplingMode::Flat);
 
-    for points_count in [500_000u64, 1_000_000u64, 5_000_000u64, 10_000_000u64] {
+    for points_count in [500_000u64, 1_000_000u64] {
         let _ctx = cust::quick_init().unwrap();
         let mut rng = Hc128Rng::from_seed(*SEED);
         let points = create_random_points(points_count as usize, &mut rng);
@@ -100,7 +100,6 @@ pub fn nn_comparison(c: &mut Criterion) {
                 b.iter(|| {
                     let stream = Stream::new(StreamFlags::NON_BLOCKING, None).unwrap();
                     let results = rtree.batch_find_neighbors(&stream, &queries).unwrap();
-                    println!("Results: {:?}", results.iter().take(10));
                 })
             },
         );

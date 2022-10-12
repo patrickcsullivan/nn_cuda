@@ -130,7 +130,7 @@ mod tests {
     use super::RTree;
     use crate::Point3;
     use cust::stream::{Stream, StreamFlags};
-    use rand::{Rng, SeedableRng};
+    use rand::{seq::IteratorRandom, Rng, SeedableRng};
     use rand_hc::Hc128Rng;
 
     const SEED: &[u8; 32] = b"LVXn6sWNasjDReRS2OZ9a0eY1aprVNYX";
@@ -154,22 +154,13 @@ mod tests {
         let rtree = RTree::new(&points).unwrap();
         let nns = rtree.batch_find_neighbors(&stream, &queries).unwrap();
 
-        // let p = &points[0];
-        // let actual = nns[100];
-        // assert_eq!(p, actual);
-
-        let q = queries[100];
-        let actual = nns[100].into_vec3();
-        let expected = find_neighbor_brute_force(&points, &q).into_vec3();
-
-        println!("q:\t\t{:?}", q.into_vec3());
-        println!("actual:\t\t{:?}", actual);
-        println!("expected:\t{:?}", expected);
-
-        assert_eq!(
-            actual.distance_squared(q.into_vec3()),
-            expected.distance_squared(q.into_vec3())
-        );
+        for (q, nn) in queries.iter().zip(nns).choose_multiple(&mut rng, 100) {
+            let expected = find_neighbor_brute_force(&points, q).into_vec3();
+            assert_eq!(
+                nn.into_vec3().distance_squared(q.into_vec3()),
+                expected.distance_squared(q.into_vec3())
+            );
+        }
     }
 
     fn create_random_points(points_count: usize, rng: &mut impl Rng) -> Vec<PointObject> {

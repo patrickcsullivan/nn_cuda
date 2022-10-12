@@ -36,11 +36,31 @@ pub unsafe fn bulk_find_neighbors(
     //------
     results_object_indices: *mut usize,
 ) {
+    // Package the data into an R-tree structure that we can more easily call
+    // methods on.
+    let rtree: RTree = RTree::new(
+        H,
+        M,
+        node_min_xs,
+        node_min_ys,
+        node_min_zs,
+        node_max_xs,
+        node_max_ys,
+        node_max_zs,
+        leaf_starts,
+        leaf_ends,
+        sorted_object_indices,
+        sorted_object_xs,
+        sorted_object_ys,
+        sorted_object_zs,
+    );
+
     let mut i = (thread::thread_idx_x() + thread::block_idx_x() * thread::block_dim_x()) as usize;
     while i < queries.len() {
         let query = queries[i];
 
         let nn_obj_idx = find_neighbor(
+            &rtree,
             sorted_object_indices,
             sorted_object_xs,
             sorted_object_ys,
@@ -54,22 +74,7 @@ pub unsafe fn bulk_find_neighbors(
 }
 
 unsafe fn find_neighbor(
-    sorted_object_indices: &[usize],
-    sorted_object_xs: &[f32],
-    sorted_object_ys: &[f32],
-    sorted_object_zs: &[f32],
-    query: Vec3<f32>,
-) -> Option<usize> {
-    brute_force(
-        sorted_object_indices,
-        sorted_object_xs,
-        sorted_object_ys,
-        sorted_object_zs,
-        query,
-    )
-}
-
-unsafe fn brute_force(
+    rtree: &RTree,
     sorted_object_indices: &[usize],
     sorted_object_xs: &[f32],
     sorted_object_ys: &[f32],
@@ -79,16 +84,19 @@ unsafe fn brute_force(
     let mut min_dist2 = f32::INFINITY;
     let mut nn_object_idx = 0;
 
-    for so_idx in 0..sorted_object_indices.len() {
-        let x = sorted_object_xs[so_idx];
-        let y = sorted_object_ys[so_idx];
-        let z = sorted_object_zs[so_idx];
-        let dist2 = dist2::to_point(query, x, y, z);
+    // Brute force search through each leaf.
+    for (&start, &end) in rtree.leaf_starts.iter().zip(rtree.leaf_ends) {
+        for so_idx in start..=end {
+            let x = sorted_object_xs[so_idx];
+            let y = sorted_object_ys[so_idx];
+            let z = sorted_object_zs[so_idx];
+            let dist2 = dist2::to_point(query, x, y, z);
 
-        if dist2 < min_dist2 {
-            let o_idx = sorted_object_indices[so_idx];
-            min_dist2 = dist2;
-            nn_object_idx = o_idx;
+            if dist2 < min_dist2 {
+                let o_idx = sorted_object_indices[so_idx];
+                min_dist2 = dist2;
+                nn_object_idx = o_idx;
+            }
         }
     }
 
