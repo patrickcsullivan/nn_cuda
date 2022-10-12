@@ -13,5 +13,6 @@ mod mem;
 mod priority_queue;
 mod rtree;
 mod scan;
+mod stack;
 mod step;
 mod vec3s;
