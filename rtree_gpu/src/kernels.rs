@@ -106,26 +106,31 @@ unsafe fn find_neighbor(
     let mut nn_object_idx = 0;
 
     // Perform a depth-first traversal of the tree.
-    for node_idx in rtree.interior_count..rtree.node_min_xs.len() {
-        queue.push(node_idx);
-        while let Some(_node_idx) = queue.top() {
-            queue.pop();
+    queue.push(rtree.root());
+    while let Some(node_idx) = queue.top() {
+        queue.pop();
 
-            match rtree.get_contents(node_idx) {
-                NodeContents::InteriorChildren { start } => todo!(),
-                NodeContents::LeafObjects { start, end } => {
-                    // Brute force search through each leaf.
-                    for so_idx in start..=end {
-                        let x = sorted_object_xs[so_idx];
-                        let y = sorted_object_ys[so_idx];
-                        let z = sorted_object_zs[so_idx];
-                        let dist2 = dist2::to_point(query, x, y, z);
+        match rtree.get_contents(node_idx) {
+            NodeContents::InteriorChildren {
+                start: children_start_idx,
+            } => {
+                for i in 0..rtree.children_per_node {
+                    let child_idx = children_start_idx + i;
+                    queue.push(child_idx);
+                }
+            }
+            NodeContents::LeafObjects { start, end } => {
+                // Brute force search through each leaf.
+                for so_idx in start..=end {
+                    let x = sorted_object_xs[so_idx];
+                    let y = sorted_object_ys[so_idx];
+                    let z = sorted_object_zs[so_idx];
+                    let dist2 = dist2::to_point(query, x, y, z);
 
-                        if dist2 < min_dist2 {
-                            let o_idx = sorted_object_indices[so_idx];
-                            min_dist2 = dist2;
-                            nn_object_idx = o_idx;
-                        }
+                    if dist2 < min_dist2 {
+                        let o_idx = sorted_object_indices[so_idx];
+                        min_dist2 = dist2;
+                        nn_object_idx = o_idx;
                     }
                 }
             }
