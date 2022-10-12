@@ -220,20 +220,15 @@ unsafe fn find_neighbor(
                 sync_threads();
             }
             NodeContents::LeafObjects { start, end } => {
-                // Brute force search through each leaf.
-                // TODO: Use caching.
-                for so_idx in start..=end {
-                    let x = sorted_object_xs[so_idx];
-                    let y = sorted_object_ys[so_idx];
-                    let z = sorted_object_zs[so_idx];
-                    let dist2 = dist2::to_point(query, x, y, z);
-
-                    if dist2 < nn_dist2 {
-                        let o_idx = sorted_object_indices[so_idx];
-                        nn_dist2 = dist2;
-                        nn_object_idx = o_idx;
-                    }
-                }
+                brute_force(
+                    &mut nn_object_idx,
+                    &mut nn_dist2,
+                    &sorted_object_xs[start..=end],
+                    &sorted_object_ys[start..=end],
+                    &sorted_object_zs[start..=end],
+                    &sorted_object_indices[start..=end],
+                    query,
+                );
             }
         }
     }
@@ -247,4 +242,27 @@ unsafe fn find_neighbor(
 
 fn grid_index_at(row_width: usize, row_idx: usize, col_idx: usize) -> usize {
     row_idx * row_width + col_idx
+}
+
+fn brute_force(
+    nn_object_idx: &mut usize,
+    nn_dist2: &mut f32,
+    sorted_object_xs: &[f32],
+    sorted_object_ys: &[f32],
+    sorted_object_zs: &[f32],
+    sorted_object_indices: &[usize],
+    query: Vec3<f32>,
+) {
+    for i in 0..sorted_object_indices.len() {
+        let x = sorted_object_xs[i];
+        let y = sorted_object_ys[i];
+        let z = sorted_object_zs[i];
+        let dist2 = dist2::to_point(query, x, y, z);
+
+        if dist2 < *nn_dist2 {
+            let o_idx = sorted_object_indices[i];
+            *nn_dist2 = dist2;
+            *nn_object_idx = o_idx;
+        }
+    }
 }
