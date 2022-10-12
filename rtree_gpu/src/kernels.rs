@@ -220,7 +220,7 @@ unsafe fn find_neighbor(
                 sync_threads();
             }
             NodeContents::LeafObjects { start, end } => {
-                brute_force1(
+                brute_force2(
                     &mut nn_object_idx,
                     &mut nn_dist2,
                     &sorted_object_xs[start..=end],
@@ -282,19 +282,22 @@ fn brute_force2(
     let ys_cache = shared_array![f32; OBJECTS_CACHE_SIZE];
     let zs_cache = shared_array![f32; OBJECTS_CACHE_SIZE];
 
-    for chunk_start in (0..sorted_object_indices.len()).step_by(OBJECTS_CACHE_SIZE) {
+    let mut chunk_start = 0;
+    while chunk_start < sorted_object_indices.len() {
         let chunk_end = (chunk_start + OBJECTS_CACHE_SIZE).min(sorted_object_indices.len());
         let chunk_size = chunk_end - chunk_start;
 
         // Load the next chunk into the cache.
         sync_threads();
-        for i in (thread_idx_x() as usize..chunk_size).step_by(block_dim_x() as usize) {
+        let mut i = thread_idx_x() as usize;
+        while i < chunk_size {
             let so_idx = chunk_start + i;
             unsafe {
                 *(&mut *xs_cache.add(i)) = sorted_object_xs[so_idx];
                 *(&mut *ys_cache.add(i)) = sorted_object_ys[so_idx];
                 *(&mut *zs_cache.add(i)) = sorted_object_zs[so_idx];
             }
+            i += block_dim_x() as usize;
         }
 
         // Scan the loaded chunk.
@@ -311,5 +314,7 @@ fn brute_force2(
                 *nn_object_idx = o_idx;
             }
         }
+
+        chunk_start += OBJECTS_CACHE_SIZE;
     }
 }
