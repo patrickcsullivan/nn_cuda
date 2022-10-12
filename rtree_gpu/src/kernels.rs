@@ -1,5 +1,5 @@
-use crate::{rtree::RTree, stack::Stack};
-use cuda_std::{prelude::*, shared_array, vek::Vec3};
+use crate::{dist2, rtree::RTree, stack::Stack};
+use cuda_std::{prelude::*, shared_array, thread::thread_idx_x, vek::Vec3};
 
 /// The number of elements in each node.
 pub const M: usize = 4;
@@ -12,7 +12,7 @@ pub const B: usize = 32;
 
 // The number of elements to store in the objects caches that are used during
 // brute force search of the leaf nodes.
-pub const O: usize = 256;
+pub const OBJECTS_CACHE_SIZE: usize = 256;
 
 #[kernel]
 #[allow(improper_ctypes_definitions, clippy::missing_safety_doc)]
@@ -36,49 +36,65 @@ pub unsafe fn bulk_find_neighbors(
     //------
     results_object_indices: *mut usize,
 ) {
-    let rtree = RTree::new(
-        H,
-        M,
-        node_min_xs,
-        node_min_ys,
-        node_min_zs,
-        node_max_xs,
-        node_max_ys,
-        node_max_zs,
-        leaf_starts,
-        leaf_ends,
-        sorted_object_indices,
-        sorted_object_xs,
-        sorted_object_ys,
-        sorted_object_zs,
-    );
-
-    // Allocate shared memory.
-    const QUEUE_SIZE: usize = M * H;
-    let queue_mem = shared_array![usize; QUEUE_SIZE];
-
-    // let queue: SharedPriorityQueue<QUEUE_SIZE> =
-    // SharedPriorityQueue::new_empty(); let dist2s_to_qs = shared_array![f32; M
-    // * B ]; let shared_sorted_object_xs = shared_array![f32; O];
-    // let shared_sorted_object_ys = shared_array![f32; O];
-    // let shared_sorted_object_zs = shared_array![f32; O];
-
     let mut i = (thread::thread_idx_x() + thread::block_idx_x() * thread::block_dim_x()) as usize;
     while i < queries.len() {
         let query = queries[i];
-        let queue = Stack::new(queue_mem, QUEUE_SIZE);
 
-        let nn_obj_idx = rtree.find_neighbor(
-            queue,
-            // dist2s_to_qs,
-            // shared_sorted_object_xs,
-            // shared_sorted_object_ys,
-            // shared_sorted_object_zs,
+        let nn_obj_idx = find_neighbor(
+            sorted_object_indices,
+            sorted_object_xs,
+            sorted_object_ys,
+            sorted_object_zs,
             query,
         );
 
         *(&mut *results_object_indices.add(i)) = nn_obj_idx.unwrap();
-
         i += (thread::block_dim_x() * thread::grid_dim_x()) as usize;
+    }
+}
+
+unsafe fn find_neighbor(
+    sorted_object_indices: &[usize],
+    sorted_object_xs: &[f32],
+    sorted_object_ys: &[f32],
+    sorted_object_zs: &[f32],
+    query: Vec3<f32>,
+) -> Option<usize> {
+    brute_force(
+        sorted_object_indices,
+        sorted_object_xs,
+        sorted_object_ys,
+        sorted_object_zs,
+        query,
+    )
+}
+
+unsafe fn brute_force(
+    sorted_object_indices: &[usize],
+    sorted_object_xs: &[f32],
+    sorted_object_ys: &[f32],
+    sorted_object_zs: &[f32],
+    query: Vec3<f32>,
+) -> Option<usize> {
+    let mut min_dist2 = f32::INFINITY;
+    let mut nn_object_idx = 0;
+
+    for so_idx in 0..sorted_object_indices.len() {
+        let x = sorted_object_xs[so_idx];
+        let y = sorted_object_ys[so_idx];
+        let z = sorted_object_zs[so_idx];
+        let dist2 = dist2::to_point(query, x, y, z);
+
+        if dist2 < min_dist2 {
+            let o_idx = sorted_object_indices[so_idx];
+            min_dist2 = dist2;
+            nn_object_idx = o_idx;
+        }
+    }
+
+    if nn_object_idx < usize::MAX {
+        Some(nn_object_idx)
+    } else {
+        None
     }
 }

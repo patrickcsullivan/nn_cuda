@@ -154,12 +154,16 @@ mod tests {
         let rtree = RTree::new(&points).unwrap();
         let nns = rtree.batch_find_neighbors(&stream, &queries).unwrap();
 
+        // let p = &points[0];
+        // let actual = nns[100];
+        // assert_eq!(p, actual);
+
         let q = queries[100];
         let actual = nns[100].into_vec3();
         let expected = find_neighbor_brute_force(&points, &q).into_vec3();
 
-        println!("q:\t{:?}", q.into_vec3());
-        println!("actual:\t{:?}", actual);
+        println!("q:\t\t{:?}", q.into_vec3());
+        println!("actual:\t\t{:?}", actual);
         println!("expected:\t{:?}", expected);
 
         assert_eq!(

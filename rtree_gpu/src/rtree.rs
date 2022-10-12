@@ -113,51 +113,6 @@ impl<'a> RTree<'a> {
         }
     }
 
-    pub fn find_neighbor(&self, mut shared_queue: Stack<usize>, query: Vec3<f32>) -> Option<usize> {
-        let mut min_dist2 = f32::INFINITY;
-        let mut nn_object_idx = 100;
-
-        // if thread_idx_x() as usize == 0 {
-        //     shared_queue.push(self.root());
-        // }
-        // sync_threads();
-
-        // while let Some(node_idx) = shared_queue.top() {
-        //     sync_threads();
-        //     if thread_idx_x() as usize == 0 {
-        //         shared_queue.pop();
-        //     }
-        //     sync_threads();
-        // }
-
-        let start = 0;
-        let end = self.sorted_object_indices.len() - 1;
-
-        // Brute force search the objects in the leaf node.
-        let objects_len = end - start + 1;
-        let mut i = thread_idx_x() as usize;
-        while i < objects_len {
-            let object_idx = start + i;
-            let x = self.sorted_object_xs[object_idx];
-            let y = self.sorted_object_ys[object_idx];
-            let z = self.sorted_object_zs[object_idx];
-            let dist2 = dist2::to_point(query, x, y, z);
-
-            if dist2 < min_dist2 {
-                min_dist2 = dist2;
-                nn_object_idx = object_idx;
-            }
-
-            i += 1;
-        }
-
-        if nn_object_idx < usize::MAX {
-            Some(nn_object_idx)
-        } else {
-            None
-        }
-    }
-
     /// Returns the index of the root node.
     fn root(&self) -> usize {
         0
