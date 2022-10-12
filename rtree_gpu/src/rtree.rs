@@ -1,3 +1,5 @@
+use cuda_std::vek::Vec3;
+
 #[derive(Clone, Copy)]
 pub struct RTree<'a> {
     /// The fixed height of the R-tree.
@@ -104,6 +106,10 @@ impl<'a> RTree<'a> {
             sorted_object_ys,
             sorted_object_zs,
         }
+    }
+
+    pub fn find_neighbor(&self, query: Vec3<f32>) -> Option<usize> {
+        Some(42)
     }
 
     /// Returns the index of the root node.
