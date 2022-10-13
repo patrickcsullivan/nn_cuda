@@ -7,7 +7,7 @@ use crate::{
 use cuda_std::{
     prelude::*,
     shared_array,
-    thread::{block_dim_x, block_idx_x, sync_threads, thread_idx_x},
+    thread::{block_dim_x, sync_threads, thread_idx_x},
     vek::{Aabb, Vec3},
 };
 
@@ -99,8 +99,6 @@ unsafe fn find_neighbor(
     query: Vec3<f32>,
 ) -> Option<usize> {
     let t_idx = thread_idx_x() as usize;
-    let b_idx = block_idx_x() as usize;
-    let b_dim = block_dim_x() as usize;
 
     // Initialize a traversal queue in shared memory.
     let queue_elements_mem = shared_array![usize; QUEUE_SIZE];
@@ -122,23 +120,31 @@ unsafe fn find_neighbor(
     // column contains the squared distances to an individual query.
     let dist2s_mem = shared_array![f32; B * M];
 
+    // Initialize the shared memory for storing the object positions when performing
+    // a brute force search of objects in a leaf node.
     let xs_cache = shared_array![f32; OBJECTS_CACHE_SIZE];
     let ys_cache = shared_array![f32; OBJECTS_CACHE_SIZE];
     let zs_cache = shared_array![f32; OBJECTS_CACHE_SIZE];
 
-    sync_threads();
-
     let mut nn_dist2 = f32::INFINITY;
     let mut nn_object_idx = 0;
 
+    // Let the 0th thread initialize the queue size in shared memory before pushing
+    // elements onto the queue.
+    sync_threads();
+
     // Perform a depth-first traversal of the tree.
     queue.push(rtree.root());
+
+    // Let the 0th thread push the root node onto the queue before all threads try
+    // to read the queue top.
     sync_threads();
+
     while let Some(node_idx) = queue.top() {
-        queue.pop();
+        // Let all threads read the queue top before popping it.
         sync_threads();
-        // TODO: May not be necessary if other syncs happen before the queue is read
-        // again. Though that may not happen in the leaf case.
+
+        queue.pop();
 
         match rtree.get_contents(node_idx) {
             NodeContents::InteriorChildren {
@@ -154,6 +160,8 @@ unsafe fn find_neighbor(
                     *(&mut *children_max_ys_mem.add(t_idx)) = rtree.node_max_ys[child_idx];
                     *(&mut *children_max_zs_mem.add(t_idx)) = rtree.node_max_zs[child_idx];
                 }
+
+                // Let all threads finish writing the AABBs before reading the AABBs.
                 sync_threads();
 
                 // Find the squared distance of each child to each thread's query.
@@ -179,9 +187,12 @@ unsafe fn find_neighbor(
                         f32::INFINITY
                     };
 
-                    let grid_idx = grid_index_at(b_dim, i, t_idx);
+                    let grid_idx = grid_index_at(B, i, t_idx);
                     *(&mut *dist2s_mem.add(grid_idx)) = dist2;
                 }
+
+                // Let each thread finish writing the child distances to its query before trying
+                // to find the minimum distance to each child node.
                 sync_threads();
 
                 // For each child node, find the minimum distance between the node and the
@@ -189,8 +200,8 @@ unsafe fn find_neighbor(
                 // TODO: Switch to efficient scan.
                 if t_idx < rtree.children_per_node {
                     let mut min_dist2 = f32::INFINITY;
-                    for col_idx in 0..b_dim {
-                        let grid_idx = grid_index_at(b_dim, t_idx, col_idx);
+                    for col_idx in 0..B {
+                        let grid_idx = grid_index_at(B, t_idx, col_idx);
                         let dist2 = *dist2s_mem.add(grid_idx);
                         if dist2 < min_dist2 {
                             min_dist2 = dist2;
@@ -200,9 +211,12 @@ unsafe fn find_neighbor(
                     // We write the results of the scan back onto the row in the shared grid, so
                     // the last element of each row in the grid will contain the minimum squared
                     // distance.
-                    let grid_idx = grid_index_at(b_dim, t_idx, b_dim - 1);
+                    let grid_idx = grid_index_at(B, t_idx, B - 1);
                     *(&mut *dist2s_mem.add(grid_idx)) = min_dist2;
                 }
+
+                // Let all threads finish calculating and/or writing the minimum distance to
+                // each child node before reading the minimum distances.
                 sync_threads();
 
                 // Add new nodes to the traversal queue.
@@ -210,7 +224,7 @@ unsafe fn find_neighbor(
                     for i in 0..rtree.children_per_node {
                         // Get the minimum distance for each child node from the last element of
                         // each row in the grid.
-                        let grid_idx = grid_index_at(b_dim, i, b_dim - 1);
+                        let grid_idx = grid_index_at(B, i, B - 1);
                         let dist2 = *dist2s_mem.add(grid_idx);
 
                         // A child node will have a finite minimum distance if it potentially
@@ -221,6 +235,9 @@ unsafe fn find_neighbor(
                         }
                     }
                 }
+
+                // Let the 0-th thread finish pushing nodes onto the queue before all threads
+                // try to read the queue top.
                 sync_threads();
             }
             NodeContents::LeafObjects { start, end } => {
@@ -231,6 +248,27 @@ unsafe fn find_neighbor(
                 while chunk_start < end {
                     let chunk_end = (chunk_start + OBJECTS_CACHE_SIZE).min(end);
                     let chunk_size = chunk_end - chunk_start;
+
+                    // Let all threads finish reading data to the cache from the last iteration of
+                    // the loop before all threads try to write to the cache again..
+                    sync_threads();
+
+                    // Load the next chunk into the cache.
+                    let mut i = t_idx as usize;
+                    while i < chunk_size {
+                        // THE PROBLEM CAUSING THE DEADLOCK SEEMS TO BE IN HERE!!!!
+                        /*
+                        let so_idx = chunk_start + i;
+                        *(&mut *xs_cache.add(i)) = sorted_object_xs[so_idx];
+                        *(&mut *ys_cache.add(i)) = sorted_object_ys[so_idx];
+                        *(&mut *zs_cache.add(i)) = sorted_object_zs[so_idx];
+                        */
+                        i += B;
+                    }
+
+                    // Let all threads finish writing data to the cache before all threads try to
+                    // read from the cache.
+                    sync_threads();
 
                     for i in 0..chunk_size {
                         let x = sorted_object_xs[chunk_start + i];
@@ -245,19 +283,7 @@ unsafe fn find_neighbor(
                         }
                     }
 
-                    // // Load the next chunk into the cache.
-                    // sync_threads();
-                    // let mut i = thread_idx_x() as usize;
-                    // while i < chunk_size {
-                    //     let so_idx = chunk_start + i;
-                    //     *(&mut *xs_cache.add(i)) = sorted_object_xs[so_idx];
-                    //     *(&mut *ys_cache.add(i)) = sorted_object_ys[so_idx];
-                    //     *(&mut *zs_cache.add(i)) = sorted_object_zs[so_idx];
-                    //     i += block_dim_x() as usize;
-                    // }
-
                     // // Scan the loaded chunk.
-                    // sync_threads();
                     // for i in 0..chunk_size {
                     //     let x = *xs_cache.add(i);
                     //     let y = *ys_cache.add(i);
@@ -274,6 +300,8 @@ unsafe fn find_neighbor(
                     chunk_start += OBJECTS_CACHE_SIZE;
                 }
 
+                // Let the 0-th thread finish popping a node from the queue before all threads
+                // try to read the queue top.
                 sync_threads();
             }
         }
