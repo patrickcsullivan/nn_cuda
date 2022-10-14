@@ -5,6 +5,9 @@
     register_attr(nvvm_internal)
 )]
 
+// Used for printing from CUDA.
+extern crate alloc;
+
 mod dist2;
 mod grid;
 pub mod kernels;

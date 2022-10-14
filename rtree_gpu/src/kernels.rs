@@ -6,8 +6,8 @@ use crate::{
 };
 use cuda_std::{
     prelude::*,
-    shared_array,
-    thread::{block_dim_x, sync_threads, thread_idx_x},
+    print as cuda_print, println as cuda_println, shared_array,
+    thread::{block_dim_x, block_idx_x, sync_threads, thread_idx_x},
     vek::{Aabb, Vec3},
 };
 
@@ -22,7 +22,7 @@ pub const B: usize = 32;
 
 // The number of elements to store in the objects caches that are used during
 // brute force search of the leaf nodes.
-pub const OBJECTS_CACHE_SIZE: usize = 256;
+pub const OBJECTS_CACHE_SIZE: usize = B;
 
 pub const QUEUE_SIZE: usize = M * H;
 
@@ -85,6 +85,7 @@ pub unsafe fn bulk_find_neighbors(
         );
 
         *(&mut *results_object_indices.add(i)) = nn_obj_idx.unwrap();
+        // cuda_println!("{}\t{}\t{}", block_idx_x(), thread_idx_x(), i);
         i += (thread::block_dim_x() * thread::grid_dim_x()) as usize;
     }
 }
@@ -143,6 +144,8 @@ unsafe fn find_neighbor(
     while let Some(node_idx) = queue.top() {
         // Let all threads read the queue top before popping it.
         sync_threads();
+
+        // debug(&format!("node {}", node_idx));
 
         queue.pop();
 
@@ -241,6 +244,40 @@ unsafe fn find_neighbor(
                 sync_threads();
             }
             NodeContents::LeafObjects { start, end } => {
+                // Loop through each point in leaf, checking to see if it's the NN.
+                for sorted_data_idx in start..=end {
+                    // let cache_idx = (sorted_data_idx - start) % OBJECTS_CACHE_SIZE;
+
+                    // // If we're trying to examine the first point in the cache, then scan forward
+                    // // and load the cache.
+                    // if cache_idx == 0 {
+                    //     thread::sync_threads();
+                    //     let mut look_ahead_idx = thread::thread_idx_x() as usize;
+                    //     while look_ahead_idx < OBJECTS_CACHE_SIZE
+                    //         && sorted_data_idx + look_ahead_idx <= end
+                    //     {
+                    //         *xs_cache.add(look_ahead_idx) =
+                    //             sorted_object_xs[sorted_data_idx + look_ahead_idx];
+                    //         *ys_cache.add(look_ahead_idx) =
+                    //             sorted_object_ys[sorted_data_idx + look_ahead_idx];
+                    //         *zs_cache.add(look_ahead_idx) =
+                    //             sorted_object_zs[sorted_data_idx + look_ahead_idx];
+                    //         look_ahead_idx += B;
+                    //     }
+                    //     thread::sync_threads();
+                    // }
+
+                    let x = sorted_object_xs[sorted_data_idx];
+                    let y = sorted_object_ys[sorted_data_idx];
+                    let z = sorted_object_zs[sorted_data_idx];
+                    let dist2 = dist2::to_point(query, x, y, z);
+                    if dist2 < nn_dist2 {
+                        nn_object_idx = sorted_object_indices[sorted_data_idx];
+                        nn_dist2 = dist2;
+                    }
+                }
+
+                /*
                 // Brute force search the objects in the leaf node.
                 let end = end + 1; // make end exclusive
 
@@ -249,21 +286,21 @@ unsafe fn find_neighbor(
                     let chunk_end = (chunk_start + OBJECTS_CACHE_SIZE).min(end);
                     let chunk_size = chunk_end - chunk_start;
 
+                    debug(&format!("chunk at [{}, {})", chunk_start, chunk_end));
+
                     // Let all threads finish reading data to the cache from the last iteration of
                     // the loop before all threads try to write to the cache again..
                     sync_threads();
 
+                    debug(&format!("sync before"));
+
                     // Load the next chunk into the cache.
-                    let mut i = t_idx as usize;
-                    while i < chunk_size {
-                        // THE PROBLEM CAUSING THE DEADLOCK SEEMS TO BE IN HERE!!!!
-                        /*
-                        let so_idx = chunk_start + i;
-                        *(&mut *xs_cache.add(i)) = sorted_object_xs[so_idx];
-                        *(&mut *ys_cache.add(i)) = sorted_object_ys[so_idx];
-                        *(&mut *zs_cache.add(i)) = sorted_object_zs[so_idx];
-                        */
-                        i += B;
+                    if t_idx < chunk_size {
+                        let so_idx = chunk_start + t_idx;
+                        *(&mut *xs_cache.add(t_idx)) = sorted_object_xs[so_idx];
+                        *(&mut *ys_cache.add(t_idx)) = sorted_object_ys[so_idx];
+                        *(&mut *zs_cache.add(t_idx)) = sorted_object_zs[so_idx];
+                        debug(&format!("so_idx {}", so_idx));
                     }
 
                     // Let all threads finish writing data to the cache before all threads try to
@@ -303,6 +340,7 @@ unsafe fn find_neighbor(
                 // Let the 0-th thread finish popping a node from the queue before all threads
                 // try to read the queue top.
                 sync_threads();
+                 */
             }
         }
     }
@@ -388,5 +426,11 @@ fn brute_force2(
         }
 
         chunk_start += OBJECTS_CACHE_SIZE;
+    }
+}
+
+fn debug(msg: &str) {
+    if block_idx_x() == 0 {
+        cuda_println!("{}\t{}", thread_idx_x(), msg);
     }
 }
